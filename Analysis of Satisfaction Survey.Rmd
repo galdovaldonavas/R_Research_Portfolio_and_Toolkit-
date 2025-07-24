@@ -180,7 +180,7 @@ with(data, prop.table(table(nps.segment)))
 
 ```{r}
 
-data$satisfaction <- floor(rnorm(data.n, mean = 3, sd=0.5) + 0.9* (1+scale(data$nps.score)))
+data$satisfaction <- floor(rnorm(data.n, mean = 3, sd=0.5) + 0.9 * (1 + as.numeric(scale(data$nps.score))))
 
 data$satisfaction[data$satisfaction<1] <- 1
 data$satisfaction[data$satisfaction>5] <- 5
@@ -299,7 +299,7 @@ Our analysis revealed a strong positive Spearman correlation between satisfactio
 
 ##2.2. Heatmaps of Scores Across Methods, Reasons, and Countries
 
-### 2.2.1. Satisfaction scores Heatmap
+### 2.2.1. Heatmap for satisfaction scores
 
 For satisfaction we only had scores for one country (Eatland) and for 2 contact methods (phone and chat). However, these scores are expected to be a more valid measures of satisfaction than the NPS scores, so we will use them to see if they show a different pattern than the NPS scores.  
 
@@ -333,19 +333,77 @@ factor.rows.levels
 factor.blocks.levels 
 
 
-# 1.Obtaining the first line of the dataset: results for the blocks and their cross with columns
 
-# 1.1. We create a loop for each block
+# 1. Results for a general block that does not desagregate results by the block factor
+    
+#1.1. First line with totals
+#it will contain the value for the whole sample, and this total desagregated by the column factor
+
+##1.1.1 Create the label for specifying we refer to results of the whole sample
+row.label.t <- paste0("Total all sample")
+
+##1.1.2. Calculate the total results for the whole sample
+if(nrow(my.data)>0){
+  total <- my.function(my.data[["my.dv"]], na.rm=TRUE)
+} else {stop("The dataset is empty")
+}
+
+##1.1.3. Calculate the total results for the columns factor
+c.total <- sapply(factor.column.levels, function(c){
+  c.subset <- my.data[ my.data[["factor.columns"]] == c, ]
+  my.function(c.subset[["my.dv"]], na.rm= TRUE)
+})
+
+## 1.1.4. Save the results of this line in a named vector
+results[[k]] <- c(group = row.label.t, overall = total, setNames(object= c.total, factor.column.levels) ) 
+k <- k+1
+
+# 1.2. Create additional lines for the general block
+      #each line will shows results of the whole sample for each level of the row factor
+      #and additional columns for that result desagregated by the colums factor 
+
+##1.2.1. Create a loop for each level in the row factor
+for (r in factor.rows.levels){
+  
+  ##1.2.2. Create a label for each line
+  row.label.r <- paste0(r)
+  
+  ##1.2.3. Calculate the total for each level of the row factor
+  r.total.subset <- my.data[my.data[["factor.rows"]]==r, ]
+  r.total <- my.function(r.total.subset[["my.dv"]], na.rm=TRUE)
+  
+  ##1.2.4. Calculate the value for each level in the row factor
+  rc.crossed <- sapply(factor.column.levels, function(c){
+    rc.crossed.subset <- my.data[my.data[["factor.rows"]] == r &
+                                   my.data[["factor.columns"]] == c
+    , ]
+    my.function(rc.crossed.subset[["my.dv"]], na.rm=TRUE)
+  })
+
+  ##1.2.5. We save the results
+  results[[k]] <- c(group = row.label.r, overall = r.total, setNames(object=rc.crossed, factor.column.levels))
+  k<- k+1
+  
+} # Close the loop for the levels of the row factor
+
+
+
+# 2.Results for each level of the block factor
+
+#2.1. first line with totals
+# it will contain the results for the total of the block and that result desagregated by the column factor
+
+# 2.1.1. We create a loop for each block
 for (b in factor.blocks.levels){
   
-  ## 1.2.Label the line to put the result for the block 
+  ## 2.1.2.Label the line to put the result for the block 
   row.label.b <- paste0("Total: ", b)
   
-  ## 1.3.Calculate the total for the block
+  ## 2.1.3.Calculate the total for the block
   b.subset <- my.data[ my.data[["factor.blocks"]]== b, ]
   b.total <- my.function(b.subset[["my.dv"]], na.rm=TRUE) 
   
-  ## 1.4.Calculate the results for the block desagregated by the columns factor
+  ## 2.1.4.Calculate the results for the block desagregated by the columns factor
   bc.crossed <- sapply(factor.column.levels, function(c){
     bc.crossed.subset <- my.data [ my.data[["factor.blocks"]] == b &
                                      my.data[["factor.columns"]] == c, ]
@@ -353,16 +411,16 @@ for (b in factor.blocks.levels){
       }else{NA_real_}
   }) 
   
-  ## 1.5. Save the results for the block in a named vector
+  ## 2.1.5. Save the results for the block in a named vector
   results [[k]] <- c(group = row.label.b, overall= b.total, setNames(object=bc.crossed, factor.column.levels))
   k<- k+1 
  
   
-      # 2.The remaining lines of the dataset corresponding to each block.
-      #each line will shows results for blocks crossed with rows, 
-      #and within each of those lines, the cross of both factors with the column factor:     
+      # 2.2. Add the remaining lines corresponding to each block.
+      #each line will shows the total results for each level of the row factor within that block, 
+      #and that result desagregated by the column factor.     
   
-      ## 2.1. Create a sub-loop for rows, within the prior loop of blocks (see 1.1)
+      ## 2.2.1. Create a sub-loop for rows, within the prior loop of blocks 
       for(r in factor.rows.levels){ 
     
         ## 2.2.Label each line specifying the block and row crossed 
@@ -383,7 +441,7 @@ for (b in factor.blocks.levels){
             else {NA_real_} #
         })
     
-        ## 2.5. Save the results of each line, corresponding to each row level, in a named vector
+        ## 2.5. Save the results of each line in a named vector
         results [[k]] <- c(group= row.label.br, overall = br.crossed, setNames(object=all.crossed, factor.column.levels))
         k <- k+1
         
@@ -392,60 +450,8 @@ for (b in factor.blocks.levels){
 } ### close the loop for the blocks factor
 
 
-# 1. Create the first line of the dataset, introducing a general block that does not desagregate results by the block factor
-    #this line will contain the value for the total of the whole sample, and this total desagregated by the column factor
-
-##1.1. Create the label for specifying we refer to results of the whole sample
-row.label.t <- paste0("Total all sample")
-
-##1.2. Calculate the total results for the whole sample
-if(nrow(my.data)>0){
-  total <- my.function(my.data[["my.dv"]], na.rm=TRUE)
-} else {stop("The dataset is empty")
-}
-
-##1.3. Calculate the total results for the columns factor
-c.total <- sapply(factor.column.levels, function(c){
-  c.subset <- my.data[ my.data[["factor.columns"]] == c, ]
-  my.function(c.subset[["my.dv"]], na.rm= TRUE)
-})
-
-## 1.4. Save the results of this line in a named vector
-results[[k]] <- c(group = row.label.t, overall = total, setNames(object= c.total, factor.column.levels) ) 
-k <- k+1
-
-# 2. Create additional lines for the general block
-      #each line will shows results for the total of each level of the row factor
-      #and additional columns for that level of the row factor across the levels of the colums factor 
-
-##2.1. Create a loop for each level in the row factor
-for (r in factor.rows.levels){
   
-  ##2.2. Create a label for each line
-  row.label.r <- paste0(r)
-  
-  ##2.3. Calculate the total for each level of the row factor
-  r.total.subset <- my.data[my.data[["factor.rows"]]==r, ]
-  r.total <- my.function(r.total.subset[["my.dv"]], na.rm=TRUE)
-  
-  ##2.4. Calculate the value for each level in the row factor
-  rc.crossed <- sapply(factor.column.levels, function(c){
-    rc.crossed.subset <- my.data[my.data[["factor.rows"]] == r &
-                                   my.data[["factor.columns"]] == c
-    , ]
-    my.function(rc.crossed.subset[["my.dv"]], na.rm=TRUE)
-  })
-
-  ##2.5. We save the results
-  results[[k]] <- c(group = row.label.r, overall = r.total, setNames(object=rc.crossed, factor.column.levels))
-  k<- k+1
-  
-  
-}
-  
-  
-  
-# 4. We agregate the results in a dataframe  
+# 3. We agregate the results in a dataframe  
 results.df <- do.call(rbind, results)
 
 
@@ -453,7 +459,273 @@ results.df <- do.call(rbind, results)
 ```
 
 
+I PASS IT TO A FUNCTION
 
+
+
+```{r}
+
+f.heatmap.3f <- function(my.data, my.dv, factor.columns, factor.rows, factor.blocks, my.function){
+
+
+# Create the list object to keep the results, and an object to index them (starting with 1)
+results <- list()
+k <- 1
+
+
+#I obtain the unique levels of the factors
+factor.column.levels <- unique(my.data[[factor.columns]])
+factor.rows.levels <- unique(my.data[[factor.rows]])
+factor.blocks.levels <- unique(my.data[[factor.blocks]])
+
+
+# 1. Results for a general block that does not desagregate results by the block factor
+    
+#1.1. First line with totals
+#it will contain the value for the whole sample, and this total desagregated by the column factor
+
+##1.1.1 Create the label for specifying we refer to results of the whole sample
+row.label.t <- paste0("Total all sample")
+
+##1.1.2. Calculate the total results for the whole sample
+if(nrow(my.data)>0){
+  total <- my.function(my.data[[my.dv]], na.rm=TRUE)
+} else {stop("The dataset is empty")
+}
+
+##1.1.3. Calculate the total results for the columns factor
+c.total <- sapply(factor.column.levels, function(c){
+  c.subset <- my.data[ my.data[[factor.columns]] == c, ]
+  my.function(c.subset[[my.dv]], na.rm= TRUE)
+})
+
+## 1.1.4. Save the results of this line in a named vector
+results[[k]] <- c(group = row.label.t, overall = total, setNames(object= c.total, factor.column.levels) ) 
+k <- k+1
+
+# 1.2. Create additional lines for the general block
+      #each line will shows results of the whole sample for each level of the row factor
+      #and additional columns for that result desagregated by the colums factor 
+
+##1.2.1. Create a loop for each level in the row factor
+for (r in factor.rows.levels){
+  
+  ##1.2.2. Create a label for each line
+  row.label.r <- paste0(r)
+  
+  ##1.2.3. Calculate the total for each level of the row factor
+  r.total.subset <- my.data[my.data[[factor.rows]]==r, ]
+  r.total <- my.function(r.total.subset[[my.dv]], na.rm=TRUE)
+  
+  ##1.2.4. Calculate the value for each level in the row factor
+  rc.crossed <- sapply(factor.column.levels, function(c){
+    rc.crossed.subset <- my.data[my.data[[factor.rows]] == r &
+                                   my.data[[factor.columns]] == c
+    , ]
+    my.function(rc.crossed.subset[[my.dv]], na.rm=TRUE)
+  })
+
+  ##1.2.5. We save the results
+  results[[k]] <- c(group = row.label.r, overall = r.total, setNames(object=rc.crossed, factor.column.levels))
+  k<- k+1
+  
+} # Close the loop for the levels of the row factor
+
+
+
+# 2.Results for each level of the block factor
+
+#2.1. first line with totals
+# it will contain the results for the total of the block and that result desagregated by the column factor
+
+# 2.1.1. We create a loop for each block
+for (b in factor.blocks.levels){
+  
+  ## 2.1.2.Label the line to put the result for the block 
+  row.label.b <- paste0("Total: ", b)
+  
+  ## 2.1.3.Calculate the total for the block
+  b.subset <- my.data[ my.data[[factor.blocks]]== b, ]
+  b.total <- my.function(b.subset[[my.dv]], na.rm=TRUE) 
+  
+  ## 2.1.4.Calculate the results for the block desagregated by the columns factor
+  bc.crossed <- sapply(factor.column.levels, function(c){
+    bc.crossed.subset <- my.data [ my.data[[factor.blocks]] == b &
+                                     my.data[[factor.columns]] == c, ]
+    if(nrow(bc.crossed.subset)>0) {my.function(bc.crossed.subset[[my.dv]], na.rm=TRUE)
+      }else{NA_real_}
+  }) 
+  
+  ## 2.1.5. Save the results for the block in a named vector
+  results [[k]] <- c(group = row.label.b, overall= b.total, setNames(object=bc.crossed, factor.column.levels))
+  k<- k+1 
+ 
+  
+      # 2.2. Add the remaining lines corresponding to each block.
+      #each line will shows the total results for each level of the row factor within that block, 
+      #and that result desagregated by the column factor.     
+  
+      ## 2.2.1. Create a sub-loop for rows, within the prior loop of blocks 
+      for(r in factor.rows.levels){ 
+    
+        ## 2.2.Label each line specifying the block and row crossed 
+        row.label.br <- paste0(b, ": ", r)  
+        
+        ## 2.3.Obtain the result for the block and row factors crossed 
+        br.crossed.subset <- my.data[my.data[[factor.blocks]] == b &
+                                      my.data[[factor.rows]] == r
+        , ]
+        br.crossed <- my.function (br.crossed.subset[[my.dv]], na.rm=TRUE)
+  
+        ## 2.4. Obtain the result for the cross of the three factors
+        all.crossed <- sapply(factor.column.levels, function(c){
+        all.crossed.subset <- my.data[my.data[[factor.blocks]] == b & 
+                                    my.data[[factor.rows]]==r &
+                                    my.data[[factor.columns]] == c, ]
+          if (nrow(all.crossed.subset) > 0){my.function(all.crossed.subset[[my.dv]], na.rm =TRUE)}
+            else {NA_real_} #
+        })
+    
+        ## 2.5. Save the results of each line in a named vector
+        results [[k]] <- c(group= row.label.br, overall = br.crossed, setNames(object=all.crossed, factor.column.levels))
+        k <- k+1
+        
+      } ###close the loop for the rows factor
+ 
+} ### close the loop for the blocks factor
+
+
+  
+# 3. We agregate the results in a dataframe and return the dataframe
+
+results.df <- as.data.frame(do.call(rbind, results), stringsAsFactors = FALSE)
+
+return(results.df)
+}
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+heatmap_df2 <- f.heatmap.3f (
+  my.data = data,
+  my.dv = "satisfaction",
+  factor.columns = "method",
+  factor.rows = "reason",
+  factor.blocks = "country",
+  my.function = mean
+)
+
+```
+
+
+OTHER CLEAN VERSION
+
+```{r}
+
+f.heatmap.3f <- function(my.data, my.dv, factor.columns, factor.rows, factor.blocks, my.function) {
+  
+  # 0. Comprobación de dataset vacío
+  if (nrow(my.data) == 0) stop("The dataset is empty")
+  
+  # 1. Inicialización
+  results <- list()
+  k <- 1
+  
+  # 2. Obtención de niveles únicos de cada factor
+  factor.column.levels <- unique(my.data[[factor.columns]])
+  factor.rows.levels   <- unique(my.data[[factor.rows]])
+  factor.blocks.levels <- unique(my.data[[factor.blocks]])
+  
+  # --------------------
+  # 3. BLOQUE GENERAL (sin desagregar por bloques)
+  # --------------------
+  
+  # 3.1 Línea de totales para toda la muestra
+  row.label.t <- "Total all sample"
+  total <- my.function(my.data[[my.dv]], na.rm = TRUE)
+  
+  c.total <- sapply(factor.column.levels, function(c) {
+    c.subset <- my.data[my.data[[factor.columns]] == c, ]
+    my.function(c.subset[[my.dv]], na.rm = TRUE)
+  })
+  
+  results[[k]] <- c(group = row.label.t, overall = total,
+                    setNames(c.total, factor.column.levels))
+  k <- k + 1
+  
+  # 3.2 Líneas por cada nivel de factor.rows
+  for (r in factor.rows.levels) {
+    row.label.r <- r
+    r.total.subset <- my.data[my.data[[factor.rows]] == r, ]
+    r.total <- my.function(r.total.subset[[my.dv]], na.rm = TRUE)
+    
+    rc.crossed <- sapply(factor.column.levels, function(c) {
+      rc.subset <- my.data[my.data[[factor.rows]] == r &
+                             my.data[[factor.columns]] == c, ]
+      my.function(rc.subset[[my.dv]], na.rm = TRUE)
+    })
+    
+    results[[k]] <- c(group = row.label.r, overall = r.total,
+                      setNames(rc.crossed, factor.column.levels))
+    k <- k + 1
+  }
+  
+  # --------------------
+  # 4. BLOQUE POR CADA NIVEL DE factor.blocks
+  # --------------------
+  for (b in factor.blocks.levels) {
+    row.label.b <- paste0("Total: ", b)
+    b.subset <- my.data[my.data[[factor.blocks]] == b, ]
+    b.total <- my.function(b.subset[[my.dv]], na.rm = TRUE)
+    
+    bc.crossed <- sapply(factor.column.levels, function(c) {
+      bc.subset <- b.subset[b.subset[[factor.columns]] == c, ]
+      if (nrow(bc.subset) > 0) my.function(bc.subset[[my.dv]], na.rm = TRUE)
+      else NA_real_
+    })
+    
+    results[[k]] <- c(group = row.label.b, overall = b.total,
+                      setNames(bc.crossed, factor.column.levels))
+    k <- k + 1
+    
+    # 4.2 Líneas por cada nivel de factor.rows dentro de cada bloque
+    for (r in factor.rows.levels) {
+      row.label.br <- paste0(b, ": ", r)
+      br.subset <- b.subset[b.subset[[factor.rows]] == r, ]
+      br.total <- my.function(br.subset[[my.dv]], na.rm = TRUE)
+      
+      all.crossed <- sapply(factor.column.levels, function(c) {
+        all.subset <- br.subset[br.subset[[factor.columns]] == c, ]
+        if (nrow(all.subset) > 0) my.function(all.subset[[my.dv]], na.rm = TRUE)
+        else NA_real_
+      })
+      
+      results[[k]] <- c(group = row.label.br, overall = br.total,
+                        setNames(all.crossed, factor.column.levels))
+      k <- k + 1
+    }
+  }
+  
+  # --------------------
+  # 5. Convertimos a data.frame y devolvemos
+  # --------------------
+  results.df <- as.data.frame(do.call(rbind, results), stringsAsFactors = FALSE)
+  colnames(results.df) <- make.names(colnames(results.df))
+  
+  return(results.df)
+}
+
+
+
+```
 
 
 
