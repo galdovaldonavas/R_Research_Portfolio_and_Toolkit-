@@ -11,6 +11,8 @@ library(psych)
 library(ggplot2)
 library(readxl)#to see the database
 library(openxlsx)#to save the database in excel
+library(dplyr) # for data manipulation
+library(tidyr) # for transforming datasets to long and wide formats
 ```
 
 
@@ -456,6 +458,219 @@ return(results.df)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+VERSIÓN FÓRMULA CORREGIDA
+
+
+```{r}
+
+f.heatmap.3f.2 <- function(my.data, my.dv, factor.columns, factor.rows, factor.blocks, my.function){
+
+
+# Create the list object to keep the results, and an object to index them (starting with 1)
+results <- list()
+k <- 1
+
+
+#I obtain the unique levels of the factors
+factor.column.levels <- unique(my.data[[factor.columns]])
+factor.rows.levels <- unique(my.data[[factor.rows]])
+factor.blocks.levels <- unique(my.data[[factor.blocks]])
+
+
+# 1. Results for a general block that does not desagregate results by the block factor
+    
+#1.1. First line with totals
+#it will contain the value for the whole sample, and this total desagregated by the column factor
+
+##1.1.1 Create the label for specifying we refer to results of the whole sample
+row.label.t <- paste0("Total all sample")
+
+##1.1.2. Calculate the total results for the whole sample
+vector.total <- my.data[[my.dv]] # vector with all the scores
+vector.total.clean <- vector.total [!is.na(vector.total)] # vector without NAs
+if (length(vector.total.clean) >0){
+  total <- my.function(vector.total.clean)
+} else {stop("The dataset is empty")
+}
+
+##1.1.3. Calculate the total results for the columns factor
+c.total <- sapply(factor.column.levels, function(c){
+  vector.c.total <- my.data[ my.data[[factor.columns]] == c, my.dv ]
+  vector.c.total.clean <- vector.c.total [!is.na(vector.c.total)]
+  if (length(vector.c.total.clean) > 0){
+    my.function(vector.c.total.clean)
+  }else{
+    NA_real_
+  }
+})
+
+## 1.1.4. Save the results of this line in a named vector
+results[[k]] <- c(group = row.label.t, overall = total, setNames(object= c.total, factor.column.levels) ) 
+k <- k+1
+
+# 1.2. Create additional lines for the general block
+      #each line will shows results of the whole sample for each level of the row factor
+      #and additional columns for that result desagregated by the colums factor 
+
+##1.2.1. Create a loop for each level in the row factor
+for (r in factor.rows.levels){
+  
+  ##1.2.2. Create a label for each line
+  row.label.r <- paste0(r)
+  
+  ##1.2.3. Calculate the total for each level of the row factor
+  r.total.vector <- my.data[my.data[[factor.rows]]==r, my.dv ]
+  r.total.vector.clean <- r.total.vector [!is.na(r.total.vector)]
+  if(length(r.total.vector.clean)>0){
+    r.total <- my.function(r.total.vector.clean)
+  } else{
+    r.total <- NA_real_
+  }
+  
+  ##1.2.4. Calculate the value for each level in the row factor
+  rc.crossed <- sapply(factor.column.levels, function(c){
+    rc.crossed.vector <- my.data[my.data[[factor.rows]] == r &
+                                  my.data[[factor.columns]] == c,
+                                  my.dv]
+    rc.crossed.vector.clean <- rc.crossed.vector [!is.na(rc.crossed.vector)]
+    
+    if(length(rc.crossed.vector.clean)>0){
+    my.function(rc.crossed.vector.clean)
+    }else{
+    NA_real_
+    }
+  })
+
+  ##1.2.5. We save the results
+  results[[k]] <- c(group = row.label.r, overall = r.total, setNames(object=rc.crossed, factor.column.levels))
+  k<- k+1
+  
+} # Close the loop for the levels of the row factor
+
+
+
+# 2.Results for each level of the block factor
+
+#2.1. first line with totals
+# it will contain the results for the total of the block and that result desagregated by the column factor
+
+# 2.1.1. We create a loop for each block
+for (b in factor.blocks.levels){
+  
+  ## 2.1.2.Label the line to put the result for the block 
+  row.label.b <- paste0("Total: ", b)
+  
+  ## 2.1.3.Calculate the total for the block
+  b.vector <- my.data[ my.data[[factor.blocks]]== b, my.dv]
+  b.vector.clean <- b.vector[!is.na(b.vector)]
+  if(length(b.vector.clean)>0){
+    b.total <- my.function(b.vector.clean)
+  }else{
+    b.total <-NA_real_
+  }
+  
+
+  ## 2.1.4.Calculate the results for the block desagregated by the columns factor
+  bc.crossed <- sapply(factor.column.levels, function(c){
+    bc.crossed.vector <- my.data [ my.data[[factor.blocks]] == b &
+                                  my.data[[factor.columns]] == c, 
+                                  my.dv]
+    bc.crossed.vector.clean <- bc.crossed.vector[!is.na(bc.crossed.vector)]
+    if(length(bc.crossed.vector.clean)>0) {my.function(bc.crossed.vector.clean)
+      }else{NA_real_}
+  }) 
+  
+  ## 2.1.5. Save the results for the block in a named vector
+  results [[k]] <- c(group = row.label.b, overall= b.total, setNames(object=bc.crossed, factor.column.levels))
+  k<- k+1 
+ 
+  
+      # 2.2. Add the remaining lines corresponding to each block.
+      #each line will shows the total results for each level of the row factor within that block, 
+      #and that result desagregated by the column factor.     
+  
+      ## 2.2.1. Create a sub-loop for rows, within the prior loop of blocks 
+      for(r in factor.rows.levels){ 
+    
+        ## 2.2.Label each line specifying the block and row crossed 
+        row.label.br <- paste0(b, ": ", r)  
+        
+        ## 2.3.Obtain the result for the block and row factors crossed 
+        br.crossed.vector <- my.data[my.data[[factor.blocks]] == b &
+                                      my.data[[factor.rows]] == r,
+                                      my.dv]
+        br.crossed.vector.clean <- br.crossed.vector[!is.na(br.crossed.vector)]
+        if(length(br.crossed.vector.clean)>0){
+          br.crossed <- my.function (br.crossed.vector.clean)
+        }else{
+          br.crossed <- NA_real_
+        }
+        
+
+        ## 2.4. Obtain the result for the cross of the three factors
+        all.crossed <- sapply(factor.column.levels, function(c){
+        all.crossed.vector <- my.data[my.data[[factor.blocks]] == b & 
+                                    my.data[[factor.rows]]==r &
+                                    my.data[[factor.columns]] == c,
+                                    my.dv]
+        all.crossed.vector.clean <- all.crossed.vector[!is.na(all.crossed.vector)]
+          if (length(all.crossed.vector.clean) > 0){my.function(all.crossed.vector.clean)}
+            else {NA_real_} #
+        })
+    
+        ## 2.5. Save the results of each line in a named vector
+        results [[k]] <- c(group= row.label.br, overall = br.crossed, setNames(object=all.crossed, factor.column.levels))
+        k <- k+1
+        
+      } ###close the loop for the rows factor
+ 
+} ### close the loop for the blocks factor
+
+
+  
+# 3. We agregate the results in a dataframe and return the dataframe
+
+results.df <- as.data.frame(do.call(rbind, results), stringsAsFactors = FALSE)
+
+results.df[,-1] <- lapply(results.df[,-1],as.numeric)
+
+return(results.df)
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
 ### 2.2.2. Heatmap for satisfaction scores
 
 For satisfaction we only had scores for one country (Eatland) and for 2 contact methods (phone and chat). However, these scores are expected to be a more valid measures of satisfaction than the NPS scores, so we will use them to see if they show a different pattern than the NPS scores.  
@@ -476,6 +691,7 @@ satisfaction.heatmap <- f.heatmap.3f (
 )
 
 write.xlsx (satisfaction.heatmap, "satisfaction.heatmap.xlsx", colnames = TRUE)
+
 
 ```
 
@@ -505,6 +721,7 @@ nps.raw.heatmap <- f.heatmap.3f (
 )
 
 write.xlsx (nps.raw.heatmap, "nps.raw.heatmap.xlsx", colnames = TRUE)
+
 
 ```
 
@@ -564,8 +781,56 @@ nps.cat.heatmap <- f.heatmap.3f (
 
 write.xlsx (nps.cat.heatmap, "nps.cat.heatmap.xlsx", colnames = TRUE)
 
+
 ```
 
+
+```{r}
+
+nps.cat.heatmap.n <- f.heatmap.3f (
+  my.data = data,
+  my.dv = "nps.score",
+  factor.columns = "method",
+  factor.rows = "reason",
+  factor.blocks = "country",
+  my.function = length
+)
+```
+
+
+
+
+
+```{r}
+knitr::include_graphics("Heatmap.png")
+```
+
+
+2.2.4
+
+We can see the three heatmaps show similar patterns, but let's look at the correlation between the three results. 
+
+
+
+```{r}
+                                                  
+sat.long <- satisfaction.heatmap %>% pivot_longer(cols = c(-1),
+                                 names_to = "evaluation",
+                                 values_to = "satisfaction") # results of satisfaction heatmap in a single column
+
+nps.raw.long <- nps.raw.heatmap %>% pivot_longer(cols = c(-1),
+                                 names_to = "evaluation",
+                                 values_to = "nps.raw")  # results of nps raw heatmap in a single column
+
+nps.cat.long <- nps.cat.heatmap %>% pivot_longer(cols = c(-1),
+                                 names_to = "evaluation",
+                                 values_to = "nps.cat")  # results of nps cat heatmap in a single column
+
+merged.heatmaps <-merge(nps.cat.long, (merge(sat.long, nps.raw.long, by= c("group", "evaluation"))), by =c ("group", "evaluation"))
+
+cor(merged.heatmaps[,3:5], use="complete.obs") #Correlation matrix across the results for the three measures
+
+```
 
 
 
