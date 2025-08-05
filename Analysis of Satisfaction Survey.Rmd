@@ -1016,92 +1016,23 @@ anova(binomial.model.c, binomial.model, test ="Chisq")
 ```
 Based on our analysis, the status variable does not have a significant impact on predicting whether a customer will be a detractor.We will therefore remove it to simplify the model, allowing us to focus on the most relevant and actionable drivers.
 
-```{r}
-#Saving the model as my.model
-my.model <- binomial.model.c
-
-# Extracting the coefficients
-coefs <- coef(my.model)
-intercept <- coefs[1]
-
-#Vector with betas, in which the beta for the intercept column is 0
-coefs.f <- coefs
-coefs.f[1] <-0
-
-#objects for the intercept and factor coefficients
-intercept
-coefs.f
-coefs
-
-#saving the e number
-e <- exp(1)
-e
-
-#calculating the probability of the intercept
-p0 <- 1/(1+e^((-1)*intercept))
-p0
-
-#calculating the probability of each factor
-
-p.factors <- 1/(1 + e^((-1)*(intercept + coefs.f )))
-p.factors 
 
 
-#calculating the differences in probability from intercept versus probability of each factor
-p.dif <- p.factors - p.factors[1]
-p.dif
 
-
-```
-
-Ahora lo hago con predict
-
-```{r}
-####
-#Design a matrix that define the presence of the factors
-####
-
-# 1. We extract the names of the factors from the model
-f.names <- names(coef(my.model))
-f.names <- f.names [-1] #to eliminate the intercept
-
-# 2. We create a dataframe with an identity matrix with the length of our factors 
-my.matrix.df <- as.data.frame(diag(length(f.names)))
-names(my.matrix.df) <- f.names
-my.matrix.df$f_name <- f.names
-my.matrix.df
-
-# 3. Manually specify the case for your interactions
-my.matrix.df$chat[my.matrix.df$f_name =="chat_incorrect_item"] <-1
-my.matrix.df$incorrect_item[my.matrix.df$f_name =="chat_incorrect_item"] <-1
-my.matrix.df
-
-
-# 4. We add a column for the intercept
-my.matrix.df$intercept <- 1
-my.matrix.df
-
-# 5. Reorganization of the columns order
-my.matrix.df <- my.matrix.df[, c("f_name", "intercept", f.names)]
-my.matrix.df
-
-# 6. Make sure the variables are expressed like in the original dataset. We do this with country
-my.matrix.df$country <- NA_character_
-my.matrix.df$country[my.matrix.df$countryDrinkland==1] <- "Drinkland"
-my.matrix.df$country[!(my.matrix.df$countryDrinkland==1)] <- "Eatland"
-
-
-```
 
 
 
 ### 2.3.3. Results Interpretation: Extent With Which Each CS Factors is Associated with Detractors
 
-This section uses the information from the logistic regression model above to provide metrics of how much each factor is associated with customers becoming detractor, including metrics like the odds ratios, the relative proportion, and the absolute percentage change. For this last metric, we will use use parametric simulations, for which we need to create a matrix about cases that represent the individual presence of the factors. 
+This section uses the information from the logistic regression model above to provide metrics of how much each factor is associated with customers becoming detractor, including metrics like the odds ratios, the relative proportion, and the absolute percentage change. For the predicted proportions, we need to create a matrix about cases that represent the individual presence of the factors and the presence of the intercept. 
 
-We start specifying this matrix, where we have the variables in our model as in the original dataset, a case representing the intercept with 0s for all variables, and a case for the individual presence of each factor. 
+We start specifying this matrix: 
 
 ```{r}
+
+#####
+#Design Matrix for Predictions
+#####
 
 # Extract the factor names from the model, with and without the intercept
 f.names.interc <- names(coef(my.model))
@@ -1127,12 +1058,13 @@ my.matrix.df$country<-as.factor(my.matrix.df$country)
 
 #Make sure the results are as expected
 str(my.matrix.df)
-view(my.matrix.df)
+
 ```
 
-We create a formula to obtain the odds ratios, relative proportions, predicted proportions, and absolute changes from the predicted proportions from the binomial model and the specified matrix. 
+Next, we create a formula to obtain the odds ratios, relative proportions, predicted proportions, and absolute changes from the predicted proportions from the binomial model and the specified matrix. 
 
-The formula also provides the 95% confidence intervals for these metrics. For calculating the confidence intervals for the absolute changes from the predicted proportions, we employ parametric bootstrap simulations. 
+The formula also provides the 95% confidence intervals for these metrics. For calculating the confidence intervals for the differences in the predicted proportion, we employ parametric bootstrap simulations. 
+
 
 
 ```{r}
@@ -1177,7 +1109,7 @@ f.metrics.binomial <- function(my.model, my.matrix){
   #--------4. Calculate the Predicted Proportions
   
   # Extract log-odds and their sd for the individual presence of the factors (using the specified matrix)
-  pred <- predict(my.model, newdata = my.matrix.df, type = "link", se.fit = TRUE)
+  pred <- predict(my.model, newdata = my.matrix, type = "link", se.fit = TRUE)
 
   #Calculate confidence intervals in log-odds
   lower_logit <- pred$fit - 1.96 * pred$se.fit
@@ -1210,42 +1142,71 @@ f.metrics.binomial <- function(my.model, my.matrix){
   })
 
   # Calculate the means of the differences and 95% CI with percentiles
-  perc_diff <- colMeans(diffs)
-  lower_perc_diff  <- apply(diffs, 2, quantile, probs = 0.025)
-  higher_perc_diff <- apply(diffs, 2, quantile, probs = 0.975)
+  prob_diff <- colMeans(diffs)
+  lower_prob_diff  <- apply(diffs, 2, quantile, probs = 0.025)
+  upper_prob_diff <- apply(diffs, 2, quantile, probs = 0.975)
   
   
   #-------- 6. Combining the results in a dataframe
   
+  #Combining all metrics
   results <- data.frame(
     Term = names(rp),
-    Percentage_Change = as.numeric(pch),
-    P.Ch_CI_Lower = as.numeric(pch_ci_low),
-    P.Ch_CI_Upper = as.numeric(pch_ci_high),
-    Odds_Ratio = as.numeric(or),
+    Prediction = as.numeric(predicted_prob),
+    Lower_Prediction = as.numeric(lower_predicted_prob),
+    Upper_Prediction = as.numeric(upper_predicted_prob),
+    Predicted_Change = as.numeric(prob_diff),
+    Lower_Predicted_Change = as.numeric(lower_prob_diff),
+    Upper_Predicted_Change = as.numeric(upper_prob_diff),
     Relative_Probability = as.numeric(rp),
-    RP_CI_Lower = as.numeric(rp_ci_low),
-    RP_CI_Upper = as.numeric(rp_ci_high)
+    Lower_Relative_Probability = as.numeric(rp_ci_low),
+    Upper_Relative_Probability = as.numeric(rp_ci_high),
+    Odds_Ratio = as.numeric(or),
+    Lower_Odds_Ratio = as.numeric(or_ci[,1]),
+    Upper_Odds_Ratio = as.numeric(or_ci[,2])
+)
+  
+  # Deleting values assigned to the intercept that have no interpretation
+  results[1, c("Predicted_Change",
+             "Lower_Predicted_Change",
+             "Upper_Predicted_Change",
+             "Relative_Probability",
+             "Lower_Relative_Probability",
+             "Upper_Relative_Probability",
+             "Odds_Ratio",
+             "Lower_Odds_Ratio",
+             "Upper_Odds_Ratio")] <- NA_real_
 
-  )
   
-  # 7. Eliminate the intercept line
-  results.rel.prop <- results[-1, ]
-  
-  # 8. Arrange results from greater percentage change to lower
-  results.rel.prop <- arrange(results.rel.prop, desc(Relative_Probability))
-  
-  # 9. Return the results
-  return(results.rel.prop)
+  # Return the results
+  return(results)
 }
 
 
+```
+
+
+
+Now we are ready to apply the function to our model: 
+
+```{r}
 #Application of the function to our binomial model
-perc.change.df <- f.perc_change.binomial (binomial.model.c)
-perc.change.df
+model.metrics.df <- f.metrics.binomial (binomial.model.c, my.matrix.df)
+model.metrics.df
+```
+
+
+For better interpretability, we rearrange the order of the results by percentage change
+
+```{r}
+#Arrange results from greater percentage change to lower
+int.df <- model.metrics.df[1,]
+factors.df <- arrange(model.metrics.df[-1,], desc(Predicted_Change))
+ordered.model.metrics.df <- bind_rows(int.df, factors.df)
+ordered.model.metrics.df
 
 ```
-```
+
 
 
 
@@ -1359,6 +1320,74 @@ Based on our analysis, we can now clearly identify the primary drivers that incr
 - An important driver of customer dissatisfaction is the synergy between chat and an incorrect item. This combination adds an extra 180% increase to the odds of a customer becoming a detractor (95% CI: 152%, 210%), on top of the individual effects of each of these two factors.
 
 We can also obtain the relative risk, which is more intuitive than the odds ratio
+
+```{r}
+#We create a formula to obtain the percentage change, relative probabilities, and odds ratios
+
+f.metrics.binomial <- function(my.model){
+  
+  # Making sure the model is glm binomial
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("The function requires a binomial model.")
+  }
+  
+  # Obtaining the coefficients and confidence intervals
+  coefs <- coef(my.model)
+  ci <- confint(my.model)
+  intercept <- coefs[1]
+  
+  
+  # Exponentiation of the coefficients and CIs to obtain odds ratios
+  or <- exp(coefs)
+  or_ci <- exp(ci)
+  
+  # 3. Calculating the base probability from the intercept
+  p0 <- or[1] / (1 + or[1])
+  
+  # 4. Obtaining relative probabilities from risk ratios and base probability
+  rp <- or / ((1 - p0) + (p0 * or))
+  
+  # 5. Aplying the same formula to obtain the limits of the confidence intervals for the relative probabilities
+  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
+  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
+  
+  # 6. Obtaining the probability changes and their confidence intervals
+  pch <- (rp -1)
+  pch_ci_low <- (rp_ci_low -1)
+  pch_ci_high <- (rp_ci_high -1)
+  
+  #7. Obtaining the absolute changes
+  p.ab.ch <- p0*rp - p0
+  
+  # 6. Combining the results in a dataframe
+  results <- data.frame(
+    Term = names(rp),
+    Percentage_Change = as.numeric(pch),
+    P.Ch_CI_Lower = as.numeric(pch_ci_low),
+    P.Ch_CI_Upper = as.numeric(pch_ci_high),
+    Odds_Ratio = as.numeric(or),
+    Relative_Probability = as.numeric(rp),
+    RP_CI_Lower = as.numeric(rp_ci_low),
+    RP_CI_Upper = as.numeric(rp_ci_high)
+
+  )
+  
+  # 7. Eliminate the intercept line
+  results.rel.prop <- results
+  
+  # 8. Arrange results from greater percentage change to lower
+  results.rel.prop <- arrange(results.rel.prop, desc(Relative_Probability))
+  
+  # 9. Return the results
+  return(results.rel.prop)
+}
+
+
+#Application of the function to our binomial model
+perc.change.df <- f.metrics.binomial(binomial.model.c)
+perc.change.df
+```
+
 
 ```{r}
 #We create a formula to obtain the percentage change, relative probabilities, and odds ratios
