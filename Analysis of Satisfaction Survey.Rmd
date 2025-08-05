@@ -13,6 +13,11 @@ library(readxl)#to see the database
 library(openxlsx)#to save the database in excel
 library(dplyr) # for data manipulation
 library(tidyr) # for transforming datasets to long and wide formats
+library(ordinal) # for ordinal logistic regression
+library(car) # for VIF calculations
+library(vcd) # for visualizing relations between factors
+library(VGAM)
+library(coefplot) # for plots about coefficients
 ```
 
 
@@ -303,186 +308,17 @@ Our analysis revealed a strong positive Spearman correlation between satisfactio
 
 ##2.2. Heatmaps of Scores Across Methods, Reasons, and Countries
 
+Since we had many levels across contact methods, contact reasons and countries, we wanted to create a heatmap that would allow us and our stakeholders to explore the effects of these factors and their interactions. 
 
-###2.2.1. Reusable function to study results across factors
+###2.2.1. Reusable function to get heatmaps across factors
 
-Since we planned to obtain heatmaps for several measures (satisfaction scores, NPS raw scores and NPS categorical scores), we specified a function that would allow us to segregate the results of whatever dependent variable across 3 factors and all potential crosses of these factors. 
+We first specified a function to obtain these heatmaps for all of our dependent variables, and for any function we wanted to apply (e.g., mean, NPS categorical...). 
 
 
 
 ```{r}
 
 f.heatmap.3f <- function(my.data, my.dv, factor.columns, factor.rows, factor.blocks, my.function){
-
-
-# Create the list object to keep the results, and an object to index them (starting with 1)
-results <- list()
-k <- 1
-
-
-#I obtain the unique levels of the factors
-factor.column.levels <- unique(my.data[[factor.columns]])
-factor.rows.levels <- unique(my.data[[factor.rows]])
-factor.blocks.levels <- unique(my.data[[factor.blocks]])
-
-
-# 1. Results for a general block that does not desagregate results by the block factor
-    
-#1.1. First line with totals
-#it will contain the value for the whole sample, and this total desagregated by the column factor
-
-##1.1.1 Create the label for specifying we refer to results of the whole sample
-row.label.t <- paste0("Total all sample")
-
-##1.1.2. Calculate the total results for the whole sample
-if(nrow(my.data)>0){
-  total <- my.function(my.data[[my.dv]], na.rm=TRUE)
-} else {stop("The dataset is empty")
-}
-
-##1.1.3. Calculate the total results for the columns factor
-c.total <- sapply(factor.column.levels, function(c){
-  c.subset <- my.data[ my.data[[factor.columns]] == c, ]
-  my.function(c.subset[[my.dv]], na.rm= TRUE)
-})
-
-## 1.1.4. Save the results of this line in a named vector
-results[[k]] <- c(group = row.label.t, overall = total, setNames(object= c.total, factor.column.levels) ) 
-k <- k+1
-
-# 1.2. Create additional lines for the general block
-      #each line will shows results of the whole sample for each level of the row factor
-      #and additional columns for that result desagregated by the colums factor 
-
-##1.2.1. Create a loop for each level in the row factor
-for (r in factor.rows.levels){
-  
-  ##1.2.2. Create a label for each line
-  row.label.r <- paste0(r)
-  
-  ##1.2.3. Calculate the total for each level of the row factor
-  r.total.subset <- my.data[my.data[[factor.rows]]==r, ]
-  r.total <- my.function(r.total.subset[[my.dv]], na.rm=TRUE)
-  
-  ##1.2.4. Calculate the value for each level in the row factor
-  rc.crossed <- sapply(factor.column.levels, function(c){
-    rc.crossed.subset <- my.data[my.data[[factor.rows]] == r &
-                                   my.data[[factor.columns]] == c
-    , ]
-    my.function(rc.crossed.subset[[my.dv]], na.rm=TRUE)
-  })
-
-  ##1.2.5. We save the results
-  results[[k]] <- c(group = row.label.r, overall = r.total, setNames(object=rc.crossed, factor.column.levels))
-  k<- k+1
-  
-} # Close the loop for the levels of the row factor
-
-
-
-# 2.Results for each level of the block factor
-
-#2.1. first line with totals
-# it will contain the results for the total of the block and that result desagregated by the column factor
-
-# 2.1.1. We create a loop for each block
-for (b in factor.blocks.levels){
-  
-  ## 2.1.2.Label the line to put the result for the block 
-  row.label.b <- paste0("Total: ", b)
-  
-  ## 2.1.3.Calculate the total for the block
-  b.subset <- my.data[ my.data[[factor.blocks]]== b, ]
-  b.total <- my.function(b.subset[[my.dv]], na.rm=TRUE) 
-  
-  ## 2.1.4.Calculate the results for the block desagregated by the columns factor
-  bc.crossed <- sapply(factor.column.levels, function(c){
-    bc.crossed.subset <- my.data [ my.data[[factor.blocks]] == b &
-                                     my.data[[factor.columns]] == c, ]
-    if(nrow(bc.crossed.subset)>0) {my.function(bc.crossed.subset[[my.dv]], na.rm=TRUE)
-      }else{NA_real_}
-  }) 
-  
-  ## 2.1.5. Save the results for the block in a named vector
-  results [[k]] <- c(group = row.label.b, overall= b.total, setNames(object=bc.crossed, factor.column.levels))
-  k<- k+1 
- 
-  
-      # 2.2. Add the remaining lines corresponding to each block.
-      #each line will shows the total results for each level of the row factor within that block, 
-      #and that result desagregated by the column factor.     
-  
-      ## 2.2.1. Create a sub-loop for rows, within the prior loop of blocks 
-      for(r in factor.rows.levels){ 
-    
-        ## 2.2.Label each line specifying the block and row crossed 
-        row.label.br <- paste0(b, ": ", r)  
-        
-        ## 2.3.Obtain the result for the block and row factors crossed 
-        br.crossed.subset <- my.data[my.data[[factor.blocks]] == b &
-                                      my.data[[factor.rows]] == r
-        , ]
-        br.crossed <- my.function (br.crossed.subset[[my.dv]], na.rm=TRUE)
-  
-        ## 2.4. Obtain the result for the cross of the three factors
-        all.crossed <- sapply(factor.column.levels, function(c){
-        all.crossed.subset <- my.data[my.data[[factor.blocks]] == b & 
-                                    my.data[[factor.rows]]==r &
-                                    my.data[[factor.columns]] == c, ]
-          if (nrow(all.crossed.subset) > 0){my.function(all.crossed.subset[[my.dv]], na.rm =TRUE)}
-            else {NA_real_} #
-        })
-    
-        ## 2.5. Save the results of each line in a named vector
-        results [[k]] <- c(group= row.label.br, overall = br.crossed, setNames(object=all.crossed, factor.column.levels))
-        k <- k+1
-        
-      } ###close the loop for the rows factor
- 
-} ### close the loop for the blocks factor
-
-
-  
-# 3. We agregate the results in a dataframe and return the dataframe
-
-results.df <- as.data.frame(do.call(rbind, results), stringsAsFactors = FALSE)
-
-results.df[,-1] <- lapply(results.df[,-1],as.numeric)
-
-return(results.df)
-}
-
-
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-VERSIÓN FÓRMULA CORREGIDA
-
-
-```{r}
-
-f.heatmap.3f.2 <- function(my.data, my.dv, factor.columns, factor.rows, factor.blocks, my.function){
 
 
 # Create the list object to keep the results, and an object to index them (starting with 1)
@@ -663,76 +499,9 @@ return(results.df)
 
 
 
+### 2.2.2. Heatmap for NPS in categorical scores
 
-
-
-
-
-
-
-
-### 2.2.2. Heatmap for satisfaction scores
-
-For satisfaction we only had scores for one country (Eatland) and for 2 contact methods (phone and chat). However, these scores are expected to be a more valid measures of satisfaction than the NPS scores, so we will use them to see if they show a different pattern than the NPS scores.  
-
-
-For that, we apply the function we created in the prior section to the satisfaction scores, and we save the obtained dataframe into excel to further clean and include colors in the heatmap. 
-
-
-```{r}
-
-satisfaction.heatmap <- f.heatmap.3f (
-  my.data = data,
-  my.dv = "satisfaction",
-  factor.columns = "method",
-  factor.rows = "reason",
-  factor.blocks = "country",
-  my.function = mean
-)
-
-write.xlsx (satisfaction.heatmap, "satisfaction.heatmap.xlsx", colnames = TRUE)
-
-
-```
-
-
-
-
-
-### 2.2.3. Heatmap for NPS in raw scores
-
-While the NPS is generally expressed in categorical terms (see next section), there are some doubts about this categorical expression. It is based on substracting % of promoters (those who score between 9 and 10) to % of detractors (those who score between 1 and 6), and as such, it can lead to confusions. For example a categorical NPS score of 20 can come from infinite distributions of NPS raw scores, including some as different as : 
-- distribution a) 60% of promoters and 20% of detractors
-- distribution b) 20% of promoters and 0% of detractors. 
-Furthermore, there is not evidence that the categorization of promoters within scores 9 and 10 and dectractors with scores of 1 and 6 applies to all contexts. 
-
-While we still used the NPS categorical score for being the one mostly used by our stakeholders, we also checked if the pattern of results was similar than the one we would obtain with the raw scores. 
-
-
-```{r}
-
-nps.raw.heatmap <- f.heatmap.3f (
-  my.data = data,
-  my.dv = "nps.score",
-  factor.columns = "method",
-  factor.rows = "reason",
-  factor.blocks = "country",
-  my.function = mean
-)
-
-write.xlsx (nps.raw.heatmap, "nps.raw.heatmap.xlsx", colnames = TRUE)
-
-
-```
-
-
-
-
-
-### 2.2.3. Heatmap for NPS in categorical scores
-
-
-We first create a function to calculate the NPS 
+To obtain the NPS in categorical terms, we also created a simple reusable function to obtain these scores from any vector of nps raw scores.  
 
 ```{r}
 
@@ -762,28 +531,10 @@ f.nps.cat(data$nps.score)
 with(data, prop.table(table(nps.segment)))
 
 ```
+
 The function is working correctly, we can see that the score we obtain is equal to substracting the percentage of promoters and detractors that we calculated with the table function on the nps.segment variable. 
 
-Now we are ready to apply the function across all of the subgroups in our heatmap: 
-
-
-
-```{r}
-
-nps.cat.heatmap <- f.heatmap.3f (
-  my.data = data,
-  my.dv = "nps.score",
-  factor.columns = "method",
-  factor.rows = "reason",
-  factor.blocks = "country",
-  my.function = f.nps.cat
-)
-
-write.xlsx (nps.cat.heatmap, "nps.cat.heatmap.xlsx", colnames = TRUE)
-
-
-```
-
+Yet, before getting results, we check if our sample sizes are acceptable and not prone to sampling biases
 
 ```{r}
 
@@ -797,23 +548,119 @@ nps.cat.heatmap.n <- f.heatmap.3f (
 )
 ```
 
+All sample sizes are high across all cells (n > 150), suggesting little probability of sampling error. 
 
-
+Now we are ready to calculate the heatmap for the NPS categorical using the functions we have prepared.
 
 
 ```{r}
-knitr::include_graphics("Heatmap.png")
+
+nps.cat.heatmap <- f.heatmap.3f (
+  my.data = data,
+  my.dv = "nps.score",
+  factor.columns = "method",
+  factor.rows = "reason",
+  factor.blocks = "country",
+  my.function = f.nps.cat #Calculation of nps categorical values
+)
+
+# We export it to excel to add colors with conditional formatting
+write.xlsx (nps.cat.heatmap, "nps.cat.heatmap.xlsx", colnames = TRUE) 
+
 ```
 
 
-2.2.4
+After applying conditional formatting in excel based on colors, we get our heatmap to identify areas in which probability to recommend our customer service is very low: 
 
-We can see the three heatmaps show similar patterns, but let's look at the correlation between the three results. 
+
+```{r}
+knitr::include_graphics("Heatmap.nps.cat.png")
+```
+
+The observation of the heatmap suggest us several effects: 
+  - Customers in Drinkland have lower probability to promote than Eatland. 
+  - Customers contacting for cancellations have lower probability to promote than customers calling for other reasons. 
+  - Phone is the contact method associated with highest probability to promote, while emai is associated with the lowest. 
+  - Customers contacting through chat for incorrect item deliveries feel very low probability to promote. 
+  
+Yet, before we proceed to further investigate these effects, we check if we find similar patterns with other measures. The NPS categorical, although have the advantage of being familiar to our stakeholders, has several limitations, such as potentially leading to confusions because of the information lost by the % substraction (it is based on substracting the % of promoters, those who score between 9 and 10, to the % of detractors, those who score between 1 and 6). To illustrate this limitation, a categorical NPS score of 20 can come from infinite distributions of NPS raw scores, including some as different as : 
+- distribution a) 60% of promoters and 20% of detractors
+- distribution b) 20% of promoters and 0% of detractors. 
+
+
+
+### 2.2.3. Heatmap for NPS in raw scores
+
+To make sure the NPS categorical is not leading us to confusing patterns and ambigüities, we check if we obtain similar patterns with the NPS raw score. We apply our premaid heatmap formula to the mean of the NPS raw scores
+
+
+```{r}
+
+nps.raw.heatmap <- f.heatmap.3f (
+  my.data = data,
+  my.dv = "nps.score",
+  factor.columns = "method",
+  factor.rows = "reason",
+  factor.blocks = "country",
+  my.function = mean # calculation of the mean of the nps raw scores
+)
+# Export it to excel to add colors with conditional formatting
+write.xlsx (nps.raw.heatmap, "nps.raw.heatmap.xlsx", colnames = TRUE)
+
+# We visualize both heatmaps after adding the colors in excel: 
+
+knitr::include_graphics("Heatmap.nps2.png")
+
+```
+
+We can see a similar pattern for both ways to calculate the results of the NPS, as we described in the section x. 
+
+Yet, we still have doubts about the quality of the NPS as a measure, in which customers ask for the probability to promote. To further gain confidence on it, we check its correspondence with the satisfaction scores. 
+
+
+
+### 2.2.2. Heatmap for satisfaction scores
+
+For satisfaction we only had scores for one country (Eatland) and for 2 contact methods (phone and chat). However, these scores are expected to be a more valid measures of satisfaction than the NPS scores, so we will use them to see if they show a different pattern than the NPS scores.  
+
+
+For that, we apply the function we created in the prior section to the satisfaction scores, and we save the obtained dataframe into excel to further clean and include colors in the heatmap. 
+
+
+```{r}
+
+satisfaction.heatmap <- f.heatmap.3f (
+  my.data = data,
+  my.dv = "satisfaction", 
+  factor.columns = "method",
+  factor.rows = "reason",
+  factor.blocks = "country",
+  my.function = mean # calculation of the mean for the satisfaction scores
+)
+
+# Export it to excel to add colors with conditional formatting
+write.xlsx (satisfaction.heatmap, "satisfaction.heatmap.xlsx", colnames = TRUE)
+
+# We visualize all heatmaps after adding the colors in excel: 
+knitr::include_graphics("Heatmap.png")
+
+
+```
+
+We can see a similar pattern for satisfaction and both ways to calculate the results of the NPS, suggesting that our NPS categorical measure in this context, is a good indicator of satisfaction, and that we can simplify our conversations with stakeholders by focusing on this measure. 
+
+Yet, to make sure our sight is not tricking us, we also check how the results are correlated
+
+
+
+###2.2.4. Correlation coefficients between NPS measures and satisfaction
+
+To see the strength of the correlations we will calculate Pearson correlations across the three measures for each cell in the heatmap. For that, we first move all the cells of the heatmaps databases in a single column, then apply the correlation. 
 
 
 
 ```{r}
-                                                  
+#Move all cells in the heatmaps to a single column                                                
 sat.long <- satisfaction.heatmap %>% pivot_longer(cols = c(-1),
                                  names_to = "evaluation",
                                  values_to = "satisfaction") # results of satisfaction heatmap in a single column
@@ -826,44 +673,966 @@ nps.cat.long <- nps.cat.heatmap %>% pivot_longer(cols = c(-1),
                                  names_to = "evaluation",
                                  values_to = "nps.cat")  # results of nps cat heatmap in a single column
 
+#Merge the columns for all measurs in a single dataset
 merged.heatmaps <-merge(nps.cat.long, (merge(sat.long, nps.raw.long, by= c("group", "evaluation"))), by =c ("group", "evaluation"))
 
+#Apply Pearson correlations
 cor(merged.heatmaps[,3:5], use="complete.obs") #Correlation matrix across the results for the three measures
+
+```
+
+All measures appear to be strongly correlated (r > .90), giving us confidence on the NPS categorical being a good indicator of satisfaction and probability to promote. This is a good new because our stakeholders are more familiar with this measure, and we can use its heatmap to discuss effects with them. 
+
+
+
+
+
+## 2.3. Statistical Models about Factors Related to Probability to Promote. 
+
+While the visualization of the heatmaps was already informing us about important aspects in which customer service is performing lower, we further explore these relations with statistical models.
+
+### 2.3.1. Building an Ordinal logistic model. 
+
+We consider that an ordinal logistic model is more appropriate than a lineal model because our variable to predict, nps scores, is an ordinal variable in which it is difficult to assume similar distances across all of the scores, specially due to the ceiling and floor effects that we infer from its distribution (see section x). 
+
+Furthermore, a linear model would not fulfill the assumption for the normality of residuals, as we can see in the QQ plots below, even when we use a square transformation of the variable.  
+
+```{r}
+#Checking normality and homocedasticy of residuals of the linear model
+linear.model <- lm (nps.score ~ method + reason + country, data =data)
+par(mfrow =c(2,2))
+plot(linear.model)
+
+#Checking normality and homocedasticy of residuals of the linear model with the squared transformation
+linear.model.sq <- lm ((nps.score^2) ~ method + reason + country, data =data)
+par(mfrow =c(2,2))
+plot(linear.model.sq)
+
+```
+
+
+As we can see in the Q-Q plots, the residuals' distributions differ strongly from the hypothetical normal distribution. 
+
+At this point, we also considered that an ordinal model was preferable than a binomial logistic regression, because it would provide information about the effects of the factors across the whole NPS scale, rather than just on a single NPS category.  
+
+It is important to note that we also had the option to use a 
+For all of these reasons, we proceed with ordinal logistic regression. 
+
+
+###2.3.1.1. Setting References across the Categories of the Factors
+
+Just to make the interpretation more intuitive, we set the levels of our factors in a way that the levels with higher nps scores are specified first (following the heatmap we calculated earlier). That way, the best levels will be used as reference to compare the effect of the others. 
+
+
+```{r}
+data$method <- factor(data$method, levels = c("phone", "web_form", "chat", "email"))
+data$reason <- factor(data$reason, levels = c("other","status", "delay", "cancellation", "incorrect_item"))
+data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
+
+```
+
+
+
+### 2.3.1.2. Checking the collinearity assumption
+
+We check the collinearity across our categorical factors using visual representations and VIF scores.
+
+```{r}
+# Mosaic plot to visualize the relations between factors (using the vcd package)
+doubledecker(with(data, table(country, reason, method )))
+
+# VIF coefficients, extracted from the linear model we calculated in section x (using the car package)
+vif(linear.model)
+
+```
+
+The VIF analysis indicates an absence of multicollinearity among our predictors. For all factors, we used the the GVIF^(1/(2*Df)) values, the most appropriate metric for comparing predictors with different numbers of categories—are extremely close to 1.0.
+
+This finding is further supported by the mosaic plot, which visually demonstrates that the frequencies of one factor are consistent across the levels of the other factors, showing no strong interdependencies
+
+
+
+##### 2.3.1.3. Checking the Proportional odds assumption
+
+
+Before testing this assumption we create dummy variables for the factors with multiple categories, so we can see the results of the proportional odds separately for each of the variables. 
+
+We also make sure our dependent variable is specified as ordinal
+
+```{r}
+
+# Dummy variables for method, using phone as the reference
+data$chat <- NA_real_
+data$chat[data$method == "chat"] <- 1
+data$chat[!(data$method == "chat")] <- 0
+
+data$email <- NA_real_
+data$email[data$method == "email"] <- 1
+data$email[!(data$method == "email")] <- 0
+
+data$web_form <- NA_real_
+data$web_form[data$method == "web_form"] <- 1
+data$web_form[!(data$method == "web_form")] <- 0
+
+# Dummy variables for reason, using status as the reference
+data$delay <- NA_real_
+data$delay[data$reason == "delay"] <- 1
+data$delay[!(data$reason == "delay")] <- 0
+
+data$cancellation <- NA_real_
+data$cancellation[data$reason == "cancellation"] <- 1
+data$cancellation[!(data$reason == "cancellation")] <- 0
+
+data$incorrect_item<- NA_real_
+data$incorrect_item[data$reason == "incorrect_item"] <- 1
+data$incorrect_item[!(data$reason == "incorrect_item")] <- 0
+
+data$status <- NA_real_
+data$status[data$reason == "status"] <- 1
+data$status[!(data$reason == "status")] <- 0
+
+
+# Register the nps score as an ordinal factor
+data$nps.score <- factor( data$nps.score, levels = 0:10, ordered = TRUE)
+
+```
+
+
+
+We check the proportional odds assumption with the ordinal package
+
+```{r}
+
+
+#Specify the basic ordinal model with the main effects
+ordinal.model <- clm(nps.score ~ web_form + chat + email + delay + status + cancellation + incorrect_item  + country, data = data)
+summary (ordinal.model)
+#Check the proportional odds assumption
+nominal_test(ordinal.model)
+
+
+
+```
+
+The results indicate that, with the exception of web_form, all the factors for contact methods and contact reasons violate the proportional odds assumption, that is, that their effects on a customer's NPS score is not consistent across the entire 0-10 scale.
+
+
+Attending to this, we will check if this issue can be corrected by incorporating interactions between the method and reason factors that we have identified in our heatmap. We can also see if simplifying the model can help
+
+If not, we will try a more flexible model that calculate separate set of coefficients for method and reason at each threshold of the nps scores.
+
+
+##### 2.3.1.3 Addressing Non-Proportional Odds by Incorportating Interactions into the Model
+
+In the heatmaps we observed an important interaction: customers contacting through chat for incorrect item deliveries feel very low probability to promote our customer service. 
+
+The incorporation of this interaction to the model not only can be informative, it could eliminate the non-proportional odds that we had identified for the method and the reason factors. 
+
+We create this model using the ordinal package: 
+
+```{r}
+
+# Prior step: creation of a dicotomous variable to account for the interaction: whether cases are due to incorrect item cases and attended by chat
+
+data$chat_incorrect_item <- NA_real_
+data$chat_incorrect_item[data$method == "chat" & data$reason == "incorrect_item"] <- 1
+data$chat_incorrect_item[!(data$method == "chat" & data$reason == "incorrect_item")] <- 0
+
+with(data,(table(chat_incorrect_item, method, reason))) # to check the variable has been created as expected
+
+# We build the ordinal logistic model with the ordinal package: 
+ordinal.model.int <-  clm(nps.score ~ web_form + chat + email + delay + status + cancellation + incorrect_item  + country + chat_incorrect_item,  data = data) 
+
+summary(ordinal.model.int)
+
+anova(ordinal.model, ordinal.model.int)
+
+
+```
+
+
+
+```{r}
+
+```
+
+The model shows that the interaction is significant. Furthermore, the likelihood ratio test indicate a statistically significant improvement in model fit for the more complex model that includes the chat_incorrect_item interaction. This is supported by a significant chi-squared test (p < 2.2e-16) and a significantly lower AIC (161,578.4) compared to the simpler model with only main effects (AIC = 161,830.7). 
+
+
+Now, let's check if the proportional odds assumption of the new model is fulfilled
+
+
+```{r}
+
+#Check the proportional odds assumption
+nominal_test(ordinal.model.int)
+```
+
+The inclusion of the interaction has improved the fulfillment of the proportional odds for some factors. It is now fulfilled for the contact reason of delay. Since this factor is not associated with a significant difference in comparison with the other contact reasons used as a reference, we could take it away from the model. 
+
+However, non proportional odds are still problematic for other contact reasons and contact methods. To further explore how these non proportional odds are acting we visualize jitter plots with the ggplot2 package: 
+
+```{r}
+
+#Reusable function for combining jitter plots and box plots: 
+
+f.nps.jitter_box <- function (my.data, my.factor, my.dv){
+  ggplot(my.data, aes(x = factor(.data[[my.factor]]), y = as.numeric(as.character(.data[[my.dv]])))) +
+  geom_jitter(width = 0.4, alpha = 0.1, color = "blue") + # Adjusted width and alpha for clarity
+  geom_boxplot(alpha = 0, outlier.shape = NA) + # Add transparent boxplots to show median/quartiles
+  labs(title = paste("NPS Score by", my.factor),
+       y = my.dv,
+       x = my.factor) +
+  theme_minimal() +
+  scale_y_continuous(breaks = 0:10) + # Ensure all NPS scores are ticks
+  scale_x_discrete(labels = c("No", "Yes"))
+}
+
+#Application of the function to each factor
+
+# For people contacting through chat:      
+f.nps.jitter_box(data, "chat", "nps.score")
+
+# For people contacting through email
+f.nps.jitter_box(data, "email", "nps.score")
+
+# For people contacting for status issues
+f.nps.jitter_box(data, "status", "nps.score")
+
+# For people contacting for cancellation issues
+f.nps.jitter_box(data, "cancellation", "nps.score")
+
+# For people contacting for incorrect item issues
+f.nps.jitter_box(data, "incorrect_item", "nps.score")
+
+# For people contacting for incorrect item issues via chat
+f.nps.jitter_box(data, "chat_incorrect_item", "nps.score")
+```
+The graphs illustrate that the influence of the factors that do not fulfill the proportional odds assumption appears to be stronger in the lower intervals of the NPS scale (i.e., differences more marked in the first quartile and below it). That is, the factors appear to have effect in the creation of detractors.  
+
+To better address these non-proportional odds, we will try to account for them in our model. 
+
+##### 2.3.1.4. Addressing Non-Proportional Odds by Accounting for Them in the Models
+
+We build a model that assumes that the influence of factors with non-proportional odds can have different coefficients for each interval of the NPS scores, using the VGAM package
+
+We also take away from the model the factor of contacting for delays, since this factor fulfilled proportional odds and was not associated with significant differences in the nps scores. 
+
+```{r}
+
+
+# Model where SOME predictors are assumed to be not proportional
+ordinal.non_proportional.model.int <- vglm(
+  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item,
+  family = cumulative(link = logitlink, parallel = ~ country + web_form),
+  data = data
+)
+
+summary(ordinal.non_proportional.model.int) 
+```
+The model did not fit correctly, and it is showing warnings that it is over-predicting some outcomes, leading to unstable calculations.
+
+We will try a simple model in which we only assume as non-proportional in the ones in which this lack of odds proportionality is higher: the contact reason of incorrect items, and the interaction factor of incorrect items attended by chat: 
+
+
+
+```{r}
+# Model where fewer predictors are assumed to be not proportional
+ordinal.non_proportional.model.int2 <- vglm(
+  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item,
+  family = cumulative(link = logitlink, parallel = ~ country + web_form + chat + email + status + cancellation),
+  data = data
+)
+
+summary(ordinal.non_proportional.model.int2)
+
+
+```
+
+This model still did not fit correctly, and it is showing warnings that it is leading to unstable calculations. We will try an even more simple model in which we only assume as non-proportional the interaction factor of incorrect items attended by chat: 
+
+
+```{r}
+# Model where only the interaction is assumed to be not proportional
+ordinal.non_proportional.model.int3 <- vglm(
+  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item,
+  family = cumulative(link = logitlink, parallel = ~ country + web_form + chat + email + status + cancellation + incorrect_item),
+  data = data
+)
+
+summary(ordinal.non_proportional.model.int3)
+```
+
+This model still did not fit correctly, indicating that our data does not work well with non proportional assumptions. 
+
+
+### 2.3.1.5. Unsolvable limitations of the ordinal model due non-proportional odds
+
+Attending to the difficulties to assume non-proportional odds in our model, we considered that the prior ordinal model is the best model we can estimate with ordinal regression, whose summary we recall below: 
+
+```{r}
+summary (ordinal.model.int)
+```
+
+
+Yet, we should interpret this model with caution, considering that the effects represented by the coefficients are variable depending on the intervals of the nps scores. Specifically, they appear to be more intense in the lower intervals of the NPS. Attending to this, we provide a complementary model in which we estimate the probability of obtaining scores in these lowers intervals, specifically the scores from 0 to 6, which are generally considered as detractors. 
+
+
+### 2.3.2. Binomial Logistic Regression Model to Predict Detractors
+
+A binomial model to predict detractors not only is a way to bypasss the proportional odds assumption of the ordinal model,  we also expect to show the most important effects in our data, since we have observed that the effects of the factors was especially reflected in the scores of the nps below 5 (see graphs). 
+
+
+```{r}
+
+#Create a dicotomous variable for users who are detractors
+
+data$detractor <- NA
+
+data$detractor [data$nps.segment == "detractor"] <- 1
+data$detractor [!(data$nps.segment == "detractor")] <- 0
+
+
+# Fit the binomial model
+binomial.model <- glm(detractor ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item, data = data, family = "binomial")
+
+summary(binomial.model)
+
+```
+
+The results are coherent with the ordinal model, but more stable and especifically focused on the presence of detractors. 
+
+The contact reason status is not showing any significant effect, so we test if we can simplify the model by removing it: 
+
+```{r}
+# Fit the binomial model cleaned for irrelevant factors
+binomial.model.c <- glm(detractor ~ web_form + chat + email + cancellation + incorrect_item  + country + chat_incorrect_item, data = data, family = "binomial")
+
+summary(binomial.model.c)
+
+anova(binomial.model.c, binomial.model, test ="Chisq")
+
+
+```
+Based on our analysis, the status variable does not have a significant impact on predicting whether a customer will be a detractor.We will therefore remove it to simplify the model, allowing us to focus on the most relevant and actionable drivers.
+
+```{r}
+#Saving the model as my.model
+my.model <- binomial.model.c
+
+# Extracting the coefficients
+coefs <- coef(my.model)
+intercept <- coefs[1]
+
+#Vector with betas, in which the beta for the intercept column is 0
+coefs.f <- coefs
+coefs.f[1] <-0
+
+#objects for the intercept and factor coefficients
+intercept
+coefs.f
+coefs
+
+#saving the e number
+e <- exp(1)
+e
+
+#calculating the probability of the intercept
+p0 <- 1/(1+e^((-1)*intercept))
+p0
+
+#calculating the probability of each factor
+
+p.factors <- 1/(1 + e^((-1)*(intercept + coefs.f )))
+p.factors 
+
+
+#calculating the differences in probability from intercept versus probability of each factor
+p.dif <- p.factors - p.factors[1]
+p.dif
+
+
+```
+
+Ahora lo hago con predict
+
+```{r}
+####
+#Design a matrix that define the presence of the factors
+####
+
+# 1. We extract the names of the factors from the model
+f.names <- names(coef(my.model))
+f.names <- f.names [-1] #to eliminate the intercept
+
+# 2. We create a dataframe with an identity matrix with the length of our factors 
+my.matrix.df <- as.data.frame(diag(length(f.names)))
+names(my.matrix.df) <- f.names
+my.matrix.df$f_name <- f.names
+my.matrix.df
+
+# 3. Manually specify the case for your interactions
+my.matrix.df$chat[my.matrix.df$f_name =="chat_incorrect_item"] <-1
+my.matrix.df$incorrect_item[my.matrix.df$f_name =="chat_incorrect_item"] <-1
+my.matrix.df
+
+
+# 4. We add a column for the intercept
+my.matrix.df$intercept <- 1
+my.matrix.df
+
+# 5. Reorganization of the columns order
+my.matrix.df <- my.matrix.df[, c("f_name", "intercept", f.names)]
+my.matrix.df
+
+# 6. Make sure the variables are expressed like in the original dataset. We do this with country
+my.matrix.df$country <- NA_character_
+my.matrix.df$country[my.matrix.df$countryDrinkland==1] <- "Drinkland"
+my.matrix.df$country[!(my.matrix.df$countryDrinkland==1)] <- "Eatland"
+
+
+```
+
+
+
+### 2.3.3. Results Interpretation: Extent With Which Each CS Factors is Associated with Detractors
+
+This section uses the information from the logistic regression model above to provide metrics of how much each factor is associated with customers becoming detractor, including metrics like the odds ratios, the relative proportion, and the absolute percentage change. For this last metric, we will use use parametric simulations, for which we need to create a matrix about cases that represent the individual presence of the factors. 
+
+We start specifying this matrix, where we have the variables in our model as in the original dataset, a case representing the intercept with 0s for all variables, and a case for the individual presence of each factor. 
+
+```{r}
+
+# Extract the factor names from the model, with and without the intercept
+f.names.interc <- names(coef(my.model))
+f.names <- f.names.interc [-1]
+
+
+# Create a design matrix representing the individual presence of the factors and the intercept 
+my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
+my.matrix.df [,1] <- f.names.interc
+names(my.matrix.df) <- c("case", f.names)
+
+
+# Specify the values for the interactions
+my.matrix.df$chat[my.matrix.df$case == "chat_incorrect_item"] <- 1
+my.matrix.df$incorrect_item[my.matrix.df$case == "chat_incorrect_item"] <- 1
+
+
+# Make sure the variables are expressed like in the original dataset. We correct it for country: 
+names(my.matrix.df)[names(my.matrix.df) == "countryDrinkland"] <- "country"
+my.matrix.df$country[my.matrix.df$country==1] <-"Drinkland"
+my.matrix.df$country[my.matrix.df$country==0] <-"Eatland"
+my.matrix.df$country<-as.factor(my.matrix.df$country)
+
+#Make sure the results are as expected
+str(my.matrix.df)
+view(my.matrix.df)
+```
+
+We create a formula to obtain the odds ratios, relative proportions, predicted proportions, and absolute changes from the predicted proportions from the binomial model and the specified matrix. 
+
+The formula also provides the 95% confidence intervals for these metrics. For calculating the confidence intervals for the absolute changes from the predicted proportions, we employ parametric bootstrap simulations. 
+
+
+```{r}
+#####
+#Formula to obtain metrics to interpret a binomial logistic model
+#####
+
+
+f.metrics.binomial <- function(my.model, my.matrix){
+  
+  #--------1. Preliminary Checks: 
+  
+  # Making sure the model is glm binomial
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("The function requires a binomial model.")
+  }
+  
+  
+  #--------2. Calculation of Odds Ratios
+  
+  # Obtaining the coefficients and confidence intervals
+  coefs <- coef(my.model)
+  ci <- confint(my.model)
+  intercept <- coefs[1]
+  
+  # Exponentiation of the coefficients and their CIs to obtain odds ratios
+  or <- exp(coefs)
+  or_ci <- exp(ci)
+  
+  
+  #--------3. Calculating the Relative Probabilities (Risk Ratios)
+  
+  # Calculating the base probability from the intercept
+  p0 <- or[1] / (1 + or[1])
+  
+  # Obtaining relative probabilities from risk ratios and base probability
+  rp <- or / ((1 - p0) + (p0 * or))
+  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
+  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
+  
+  
+  #--------4. Calculate the Predicted Proportions
+  
+  # Extract log-odds and their sd for the individual presence of the factors (using the specified matrix)
+  pred <- predict(my.model, newdata = my.matrix.df, type = "link", se.fit = TRUE)
+
+  #Calculate confidence intervals in log-odds
+  lower_logit <- pred$fit - 1.96 * pred$se.fit
+  upper_logit <- pred$fit + 1.96 * pred$se.fit
+
+  #Specify a function to transform log-odds to probabilities
+  f.inv_logit <- function(x) {1 / (1 + exp(-x))}
+  
+  #Apply the function to the log-odds and the limits of their ci
+  predicted_prob <- f.inv_logit(pred$fit) # Predicted probabilities
+  lower_predicted_prob <- f.inv_logit(lower_logit) # Lower limit of CI for predicted probabilities
+  upper_predicted_prob <- f.inv_logit(upper_logit) # Upper limit of CI for predicted probabilities
+
+  
+  #--------5. Differences of the Predicted Proportions in Comparison to the Intercept
+
+  # Simulate a distribution of log-odds, for example with 10000 cases
+  set.seed(123)
+  simulated_log_odds <- as.data.frame(matrix(
+  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
+  ncol = length(pred$fit), byrow = TRUE
+  ))
+
+  # Transform logg-odds to expected probabilities (using the formula specified above)
+  simulated_probs <- f.inv_logit(simulated_log_odds)
+
+  # Calculate differences from the first column, which correspond to the intercept probabilities
+  diffs <- apply(simulated_probs, 2, function(col){
+  col - simulated_probs[[1]]
+  })
+
+  # Calculate the means of the differences and 95% CI with percentiles
+  perc_diff <- colMeans(diffs)
+  lower_perc_diff  <- apply(diffs, 2, quantile, probs = 0.025)
+  higher_perc_diff <- apply(diffs, 2, quantile, probs = 0.975)
+  
+  
+  #-------- 6. Combining the results in a dataframe
+  
+  results <- data.frame(
+    Term = names(rp),
+    Percentage_Change = as.numeric(pch),
+    P.Ch_CI_Lower = as.numeric(pch_ci_low),
+    P.Ch_CI_Upper = as.numeric(pch_ci_high),
+    Odds_Ratio = as.numeric(or),
+    Relative_Probability = as.numeric(rp),
+    RP_CI_Lower = as.numeric(rp_ci_low),
+    RP_CI_Upper = as.numeric(rp_ci_high)
+
+  )
+  
+  # 7. Eliminate the intercept line
+  results.rel.prop <- results[-1, ]
+  
+  # 8. Arrange results from greater percentage change to lower
+  results.rel.prop <- arrange(results.rel.prop, desc(Relative_Probability))
+  
+  # 9. Return the results
+  return(results.rel.prop)
+}
+
+
+#Application of the function to our binomial model
+perc.change.df <- f.perc_change.binomial (binomial.model.c)
+perc.change.df
+
+```
+```
+
+
+
+
+OBTAINING THE PREDICTED PROBABILITIES AND THEIR CONFIDENCE INTERVALS
+
+
+```{r}
+#Calculate log-odds and standard errors
+pred <- predict(my.model, newdata = my.matrix.df, type = "link", se.fit = TRUE)
+
+#Calculate confidence intervals in log-odds
+lower_logit <- pred$fit - 1.96 * pred$se.fit
+upper_logit <- pred$fit + 1.96 * pred$se.fit
+
+
+#Transform to probabilities, using a function
+f.inv_logit <- function(x) {1 / (1 + exp(-x))}
+
+predicted_prob <- f.inv_logit(pred$fit) # Predicted probabilities
+lower_predicted_prob <- f.inv_logit(lower_logit) # Lower limit of CI for predicted probabilities
+upper_predicted_prob <- f.inv_logit(upper_logit) # Upper limit of CI for predicted probabilities
+
+predicted_prob
+lower_prob 
+upper_prob 
+
+```
+
+
+OBTAINING THE DIFFERENCES OF THE EXPECTED PERCENTAGES AND THEIR CONFIDENCE INTERVALS
+We employ parametric bootstrap simulations to estimate the differences in detractor percentages linked to the presence of key factors
+
+```{r}
+
+# Simulate a distribution of log-odds, for example with 10000 cases
+set.seed(123)
+simulated_log_odds <- as.data.frame(matrix(
+  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
+  ncol = length(pred$fit), byrow = TRUE
+))
+
+# Transform logg-odds to expected probabilities
+simulated_probs <- f.inv_logit(simulated_log_odds)
+
+# 4. Calculate differences from the first column that correspond to the intercept probabilities
+diffs <- apply(simulated_probs, 2, function(col){
+  col - simulated_probs[[1]]
+})
+
+# 5. Calculate the means of the differences and 95% CI with percentiles
+perc_diff <- colMeans(diffs)
+lower_perc_diff  <- apply(diffs, 2, quantile, probs = 0.025)
+higher_perc_diff <- apply(diffs, 2, quantile, probs = 0.975)
+
+perc_diff
+lower_perc_diff
+higher_perc_diff
+
+```
+
+k
+
+
+
+
+
+
+```{r}
+
+
+# 2. Simular log-odds muchas veces (por ejemplo, 10000 veces)
+set.seed(123)
+simulated_log_odds <- matrix(
+  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
+  ncol = length(pred$fit), byrow = TRUE
+)
+
+# 3. Transformar a probabilidad
+simulated_probs <- f.inv_logit(simulated_log_odds)
+
+# 4. Calcular diferencias respecto al intercepto (primera fila)
+diffs <- sweep(simulated_probs, 1, simulated_probs[,1], "-")
+
+# 5. Calcular percentiles para IC al 95%
+perc_diff <- colMeans(diffs)
+lower_perc_diff  <- apply(diffs, 2, quantile, probs = 0.025)
+higher_perc_diff <- apply(diffs, 2, quantile, probs = 0.975)
+
+perc_diff
+lower_perc_diff
+higher_perc_diff
 
 ```
 
 
 
 
-1. Usando la sintaxis Markdown
-Si tienes la imagen guardada (por ejemplo, satisfaction_heatmap.png), simplemente puedes escribir:
 
-markdown
-Copiar
-Editar
-![Heatmap de satisfacción](satisfaction_heatmap.png)
-Esto mostrará la imagen en el documento renderizado (HTML, PDF, Word).
+Using this model, we calculate the odds ratios of the coefficients and their confidence intervals: 
 
-2. Usando R con knitr::include_graphics()
-Si quieres insertar una imagen generada o guardada desde R:
-
-r
-Copiar
-Editar
-knitr::include_graphics("satisfaction_heatmap.png")
-Esto es útil si generas la imagen en un chunk anterior y luego la incluyes.
+```{r}
 
 
 
+```
+Based on our analysis, we can now clearly identify the primary drivers that increase a customer's odds of becoming a detractor. Examples of key findings to discuss with stakeholders are:
+
+- Among the different contact channels, email is the most significant individual driver. It increases the odds of a customer becoming a detractor by 72% (95% CI: 62%, 83%) compared to contacting by telephone.
+
+- An important driver of customer dissatisfaction is the synergy between chat and an incorrect item. This combination adds an extra 180% increase to the odds of a customer becoming a detractor (95% CI: 152%, 210%), on top of the individual effects of each of these two factors.
+
+We can also obtain the relative risk, which is more intuitive than the odds ratio
+
+```{r}
+#We create a formula to obtain the percentage change, relative probabilities, and odds ratios
+
+f.metrics.binomial <- function(my.model){
+  
+  # Making sure the model is glm binomial
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("The function requires a binomial model.")
+  }
+  
+  # Obtaining the coefficients and confidence intervals
+  coefs <- coef(my.model)
+  ci <- confint(my.model)
+  intercept <- coefs[1]
+  
+  
+  # Exponentiation of the coefficients and CIs to obtain odds ratios
+  or <- exp(coefs)
+  or_ci <- exp(ci)
+  
+  # 3. Calculating the base probability from the intercept
+  p0 <- or[1] / (1 + or[1])
+  
+  # 4. Obtaining relative probabilities from risk ratios and base probability
+  rp <- or / ((1 - p0) + (p0 * or))
+  
+  # 5. Aplying the same formula to obtain the limits of the confidence intervals for the relative probabilities
+  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
+  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
+  
+  # 6. Obtaining the probability changes and their confidence intervals
+  pch <- (rp -1)
+  pch_ci_low <- (rp_ci_low -1)
+  pch_ci_high <- (rp_ci_high -1)
+  
+  #7. Obtaining the absolute changes
+  p.ab.ch <- p0*rp - p0
+  
+  # 6. Combining the results in a dataframe
+  results <- data.frame(
+    Term = names(rp),
+    Percentage_Change = as.numeric(pch),
+    P.Ch_CI_Lower = as.numeric(pch_ci_low),
+    P.Ch_CI_Upper = as.numeric(pch_ci_high),
+    Odds_Ratio = as.numeric(or),
+    Relative_Probability = as.numeric(rp),
+    RP_CI_Lower = as.numeric(rp_ci_low),
+    RP_CI_Upper = as.numeric(rp_ci_high)
+
+  )
+  
+  # 7. Eliminate the intercept line
+  results.rel.prop <- results[-1, ]
+  
+  # 8. Arrange results from greater percentage change to lower
+  results.rel.prop <- arrange(results.rel.prop, desc(Relative_Probability))
+  
+  # 9. Return the results
+  return(results.rel.prop)
+}
+
+
+#Application of the function to our binomial model
+perc.change.df <- f.perc_change.binomial (binomial.model.c)
+perc.change.df
+
+```
+
+
+
+We can graphically represent these results: 
+
+
+```{r}
+# We provide labels for each factor in the results dataframe: 
+
+perc.change.df$Factor.Label <- NA_character_
+perc.change.df$Factor.Label [perc.change.df$Term == "chat_incorrect_item"] <- "Incorrect item issues attended via chat"
+perc.change.df$Factor.Label [perc.change.df$Term == "email"] <- "Attended via email"
+perc.change.df$Factor.Label [perc.change.df$Term == "chat"] <- "Attended via chat"
+perc.change.df$Factor.Label [perc.change.df$Term == "web_form"] <- "Attended via web form"
+perc.change.df$Factor.Label [perc.change.df$Term == "countryDrinkland"] <- "Attention in the country Drinkland"
+perc.change.df$Factor.Label [perc.change.df$Term == "cancellation"] <- "Customers had a cancellation issues"
+perc.change.df$Factor.Label [perc.change.df$Term == "incorrect_item"] <- "Customers had incorrect items issues"
+perc.change.df # to check the results are as expected
+
+
+
+
+
+# Create the dot-and-whisker plot
+ggplot(perc.change.df, aes(x = Percentage_Change, 
+                    y = reorder(Factor.Label, Percentage_Change))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
+  geom_errorbarh(aes(xmin = P.Ch_CI_Lower, xmax = P.Ch_CI_Upper), height = 0.2) +
+  geom_point(size = 3) +
+  labs(
+    title = "Impact of Customer Service Factors in Detractors Probability",
+    x = "% of Increase in Detractors Probability",
+    y = "Customer Service Factors"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
+
+SEGUIR AQUÍ: 
+Opción A) Ver si puedo ponderar los resultados de la gráfica anterior por el número de casos. Tengo dudas, porque la probabilidad de ser un detractor (el intercepto) cambia en función del número de casos asociados a ese intercepto. ¿o no? yo creo que sería independiente...pues asumo que si he dicho que aumentan un 5% respecto a la base inicial, si sé que ese 5% de incremento sólo ocurre en el 10% de los casos, entonces ya lo tengo, es un impacto de 0.5% de incremento en el porcentaje inicial de detractores. Lo que ya no sé es si aplica a los intervalos de confianza. 
+
+OPCIÓN B) Lo de intentar calcular los valores predichos y sus intervalos de confianza... también podría cuadrar, pues es distinto a calcular los descriptivos ya que los descriptivos se ven afectados por la preponderancia de otros factores. De hecho me parece la solución más limpia. Y en la que trabajo con valores predichos, que tiene bastante utilidad para luego
+
+
+Ver si puedo calcular los incrementos absolutos en el porcentaje de detractores asociados a cada factor, y el IC de esos incrementos.  
+
+
+Diferencias absolutas
+
+
+```{r}
+
+
+# =======================================================
+# Paso 1: Definir el escenario de referencia (la línea base)
+#         Esto corresponde al intercepto de tu modelo.
+#         Debes incluir TODAS las variables de tu modelo,
+#         con los valores de referencia (0 para las dummies,
+#         "Eatland" para el país en este caso).
+# =======================================================
+
+referencia <- data.frame(
+  web_form = 0,
+  chat = 0,
+  email = 0,
+  cancellation = 0,
+  incorrect_item = 0,
+  country = "Eatland"
+)
+
+# =======================================================
+# Paso 2: Definir los escenarios que quieres comparar con la línea base
+#         Crea un dataframe con una fila para cada escenario.
+#         Asegúrate de que los nombres de las columnas coincidan
+#         exactamente con las variables de tu modelo.
+# =======================================================
+
+escenarios <- data.frame(
+  # Scenario: Web Form
+  web_form = 1, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, country = "Eatland",
+  
+  # Scenario: Chat
+  web_form = 0, chat = 1, email = 0, cancellation = 0, incorrect_item = 0, country = "Eatland",
+  
+  # Scenario: Email
+  web_form = 0, chat = 0, email = 1, cancellation = 0, incorrect_item = 0, country = "Eatland",
+  
+  # Scenario: Cancellation
+  web_form = 0, chat = 0, email = 0, cancellation = 1, incorrect_item = 0, country = "Eatland",
+  
+  # Scenario: Incorrect Item
+  web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 1, country = "Eatland",
+  
+  # Scenario: Country is Drinkland
+  web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, country = "Drinkland",
+  
+  # Scenario: Interaction Chat & Incorrect Item
+  web_form = 0, chat = 1, email = 0, cancellation = 0, incorrect_item = 1, country = "Eatland"
+)
+
+# Transponer el dataframe para que cada fila sea un escenario
+escenarios <- as.data.frame(t(escenarios))
+rownames(escenarios) <- NULL # Limpiar los nombres de las filas
+
+# =======================================================
+# Paso 3: Predecir las probabilidades y sus intervalos de confianza
+# =======================================================
+
+# Probabilidad de la línea base
+pred_base <- predict(binomial.model.c, newdata = referencia, type = "response")
+prob_base_pct <- pred_base * 100
+
+# Probabilidades de los escenarios
+pred_escenarios <- predict(binomial.model.c, newdata = escenarios, type = "response")
+prob_escenarios_pct <- pred_escenarios * 100
+
+# =======================================================
+# Paso 4: Calcular la diferencia absoluta y sus intervalos de confianza
+# =======================================================
+
+diferencia_absoluta_pp <- prob_escenarios_pct - prob_base_pct
+
+# NOTA: Calcular el intervalo de confianza para la diferencia absoluta es complejo.
+#       Para tu propósito, es suficiente mostrar el intervalo para cada probabilidad,
+#       ya que si no se solapan, la diferencia es estadísticamente significativa.
+#       El código anterior era demasiado complejo y era la fuente de los errores.
+
+# =======================================================
+# Paso 5: Unir todo en un dataframe final y ordenar
+# =======================================================
+
+# Crear el dataframe de resultados
+results_df <- data.frame(
+  Escenario = c(
+    "Web Form", "Chat", "Email", "Cancellation", 
+    "Incorrect Item", "Country: Drinkland", "Chat & Incorrect Item"
+  ),
+  Probabilidad_Base = prob_base_pct,
+  Probabilidad_Escenario = prob_escenarios_pct,
+  Diferencia_Absoluta = diferencia_absoluta_pp
+)
+
+# Ordenar los resultados para una mejor visualización
+results_df <- arrange(results_df, desc(Diferencia_Absoluta))
+
+# Imprimir la tabla final
+print(results_df)
+
+```
 
 
 
 
 
 
+```{r}
+coefplot(binomial.model.c, intercept = FALSE, exp = TRUE,
+         ylab= "Customer Service Factors",
+         xlab = "Odds Ratio of Becoming a Detractor (vs. Baseline)")
+```
 
 
 
+
+```{r}
+
+# 2. Obtener los coeficientes y sus CIs (en escala de log-odds)
+coefs <- summary(binomial.model.c)$coefficients
+cis <- confint(binomial.model.c)
+
+# 3. Crear un dataframe con los datos
+plot_data <- data.frame(
+  term = rownames(coefs),
+  estimate = coefs[, "Estimate"],
+  conf_low = cis[, 1],
+  conf_high = cis[, 2]
+)
+
+# Eliminar el intercepto del dataframe
+plot_data <- plot_data[-1,]
+
+# 4. Exponentiar todos los valores a la escala de Odds Ratio
+plot_data$estimate <- exp(plot_data$estimate)
+plot_data$conf_low <- exp(plot_data$conf_low)
+plot_data$conf_high <- exp(plot_data$conf_high)
+
+# 5. Crear el gráfico con ggplot2
+ggplot(plot_data, aes(x = estimate, y = term)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "darkgrey") +
+  geom_errorbarh(aes(xmin = conf_low, xmax = conf_high), height = 0.2) +
+  geom_point(size = 3) +
+  scale_x_continuous(trans='log10') + # Opcional: usar escala logarítmica para el eje x para mejor visualización
+  labs(
+    x = "Odds Ratio (vs. Baseline)",
+    y = "Customer Service Factors",
+    title = "Impacto de los factores en la probabilidad de ser detractor"
+  ) +
+  theme_minimal()
+
+```
+
+
+SEGUIR AQUÍ
+
+- Graphs: relative risk (con y sin relativizar por numero de llamadas) + bargraphs (con y sin relativizar por numero de llamadas - tipo mosaic plot pero en lugar del numero de personas numero de llamadas)
 
 
 
@@ -900,99 +1669,56 @@ Although we initially simulated complaints for all subjects in the dataset, we d
 Specifically, for each method, reason, and country combination, we aim to obtain a sample of 100 subjects and store the results in a new dataset.
 
 ```{r}
-# Optional: Examine the distribution of our current data across the key factors.
-with(data, table(method, reason, country))
+# Función para obtener las métricas de impacto de un modelo binomial
 
-
-
-#  --- Define a Function to perform stratified sampling ---
-# This function takes the desired number of samples per group (my.n),
-# the original dataset (my.data), and the names of the three factor columns
-# (my.factor1, my.factor2, my.factor3) as character strings.
-
-f.sample.3f <- function(my.n, my.data, my.factor1, my.factor2, my.factor3){
+f.metrics.binomial <- function(my.model){
   
-  # Input validation: Ensure factor names are passed as character strings.
-  if (!is.character(my.factor1) || !is.character(my.factor2) || !is.character(my.factor3)) {
-    stop("The factors have to be character chains, with names within quotation marks.")
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("La función requiere un objeto de modelo glm con familia 'binomial'.")
   }
   
-  # Initialize an empty list to store the sampled subsets from each stratum.
-  results <- list() 
+  # 1. Crear un dataframe con los escenarios a comparar
+  #    Necesitas definir todas tus variables dummy y de interacción
+  escenarios <- data.frame(
+    Term = names(coef(my.model)),
+    web_form = c(0, 1, 0, 0, 0, 0, 0),
+    chat = c(0, 0, 1, 0, 0, 0, 0),
+    email = c(0, 0, 0, 1, 0, 0, 0),
+    cancellation = c(0, 0, 0, 0, 1, 0, 0),
+    incorrect_item = c(0, 0, 0, 0, 0, 1, 0),
+    countryDrinkland = c(0, 0, 0, 0, 0, 0, 1)
+  )
   
-  # Initialize a counter for indexing elements in the 'results' list.
-  k <- 1 
+  # Eliminar la fila del intercepto del dataframe
+  escenarios <- escenarios[-1, ]
   
-  # Iterate through each unique level of the first factor.
-  for (i in unique(my.data[[my.factor1]])){
-    # Within each level of the first factor, iterate through unique levels of the second factor.
-    for(j in unique(my.data[[my.factor2]])){
-      # Within each combination of the first two factors, iterate through unique levels of the third factor.
-      for (q in unique (my.data[[my.factor3]])){
-        
-        # Filter the original dataframe to get the subset of data
-        current.subset <- my.data[my.data[[my.factor1]] == i & 
-                                  my.data[[my.factor2]] == j & 
-                                  my.data[[my.factor3]] == q, ]
-          
-        # Get the number of rows (cases) in the current subset.
-        current_rows <- nrow(current.subset)
-          
-        # Sampling logic based on the size of the current group:
-        if(current_rows == 0){
-          # If the group has no cases, issue an informative warning and go to the next loop
-          warning(paste0("The group (", my.factor1, "=", i, ", ", my.factor2, "=", j, ", ", 
-                         my.factor3, "=", q, ") has no cases."))
-          next 
-        } else if (current_rows >= my.n){
-          # If the group has  equal to or greater cases than the desired n, we take a random sample:
-          current.subset <- current.subset[sample(current_rows, my.n), ]
-        } else if (current_rows < my.n) {
-          # If the group has fewer cases than desired n, include all available cases, with a warning.
-          warning(paste0("The group (", my.factor1, "=", i, ", ", my.factor2, "=", j, ", ", 
-                         my.factor3, "=", q, ") has less cases than the expected n. All available cases will be included."))
-        }
-          
-        # Add the processed subset (either sampled or full) to our list of results.
-        results[[k]] <- current.subset
-        # Increment the counter for the next element in the list.
-        k <- k+1
-          
-      } # End of the third factor (q) loop
-    } # End of the second factor (j) loop
-  } # End of the first factor (i) loop
-
-  # Final check: If the 'results' list is empty after all loops,
-  # it means no groups could be sampled (e.g., all were empty).
-  # In this case, return an empty dataframe.
-  if (length(results) == 0) {
-    message("No groups met the sampling criteria or all groups were empty. Returning an empty data frame.")
-    return(data.frame())
-  }
+  # 2. Predecir las probabilidades para cada escenario
+  #    'type = "response"' devuelve la probabilidad directamente
+  probabilidades_predichas <- predict(my.model, newdata = escenarios, type = "response")
   
-  # Combine all dataframes from the 'results' list into a single dataframe.
-  # do.call(rbind, ...) is an efficient way to achieve this.
-  sample.df <- do.call(rbind, results)
+  # 3. Calcular la probabilidad base
+  #    Esto se hace prediciendo para el escenario de referencia (todo en 0)
+  prob_base <- predict(my.model, newdata = data.frame(web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, countryDrinkland = 0), type = "response")
   
-  # Return the final sampled dataframe.
-  return(sample.df)
+  # 4. Calcular la diferencia absoluta en puntos porcentuales
+  diferencia_absoluta_pp <- (probabilidades_predichas - prob_base) * 100
+  
+  # 5. Crear el dataframe final
+  results <- data.frame(
+    Term = escenarios$Term,
+    Probabilidad_Base_pct = prob_base * 100,
+    Nueva_Probabilidad_pct = probabilidades_predichas * 100,
+    Diferencia_Absoluta_pp = diferencia_absoluta_pp
+  )
+  
+  # 6. Ordenar los resultados
+  results <- dplyr::arrange(results, desc(Diferencia_Absoluta_pp))
+  
+  return(results)
 }
 
-
-# --- Execute the Sampling Function ---
-
-data.complaints <- f.sample.3f(
-  my.n = 100,             # Desired number of cases per stratum
-  my.data = data,         # Your input dataframe
-  my.factor1 = "method",  # Column name for the first factor (as a character string)
-  my.factor2 = "reason",  # Column name for the second factor (as a character string)
-  my.factor3 = "country"  # Column name for the third factor (as a character string)
-)
-
-
-# Optional: examine the distribution of our sample across the key factors.
-with(data.complaints, table(method, reason, country))
-summary(data.complaints)
+diff.prop.df <- f.metrics.binomial(binomial.model.c)
+diff.prop.df
 
 ```
 
