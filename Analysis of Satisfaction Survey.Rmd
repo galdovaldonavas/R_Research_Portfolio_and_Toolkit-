@@ -1328,176 +1328,18 @@ ggplot(ord.model.metrics.df [-1,], aes(x = Impact_Predicted_Change,
 
 
 
-SEGUIR AQUÍ: 
-Opción A) Ver si puedo ponderar los resultados de la gráfica anterior por el número de casos. Tengo dudas, porque la probabilidad de ser un detractor (el intercepto) cambia en función del número de casos asociados a ese intercepto. ¿o no? yo creo que sería independiente...pues asumo que si he dicho que aumentan un 5% respecto a la base inicial, si sé que ese 5% de incremento sólo ocurre en el 10% de los casos, entonces ya lo tengo, es un impacto de 0.5% de incremento en el porcentaje inicial de detractores. Lo que ya no sé es si aplica a los intervalos de confianza. 
-
-OPCIÓN B) Lo de intentar calcular los valores predichos y sus intervalos de confianza... también podría cuadrar, pues es distinto a calcular los descriptivos ya que los descriptivos se ven afectados por la preponderancia de otros factores. De hecho me parece la solución más limpia. Y en la que trabajo con valores predichos, que tiene bastante utilidad para luego
-
-
-Ver si puedo calcular los incrementos absolutos en el porcentaje de detractores asociados a cada factor, y el IC de esos incrementos.  
-
-
-Diferencias absolutas
-
-
-
-
-
-```{r}
-
-
-# =======================================================
-# Paso 1: Definir el escenario de referencia (la línea base)
-#         Esto corresponde al intercepto de tu modelo.
-#         Debes incluir TODAS las variables de tu modelo,
-#         con los valores de referencia (0 para las dummies,
-#         "Eatland" para el país en este caso).
-# =======================================================
-
-referencia <- data.frame(
-  web_form = 0,
-  chat = 0,
-  email = 0,
-  cancellation = 0,
-  incorrect_item = 0,
-  country = "Eatland"
-)
-
-# =======================================================
-# Paso 2: Definir los escenarios que quieres comparar con la línea base
-#         Crea un dataframe con una fila para cada escenario.
-#         Asegúrate de que los nombres de las columnas coincidan
-#         exactamente con las variables de tu modelo.
-# =======================================================
-
-escenarios <- data.frame(
-  # Scenario: Web Form
-  web_form = 1, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, country = "Eatland",
-  
-  # Scenario: Chat
-  web_form = 0, chat = 1, email = 0, cancellation = 0, incorrect_item = 0, country = "Eatland",
-  
-  # Scenario: Email
-  web_form = 0, chat = 0, email = 1, cancellation = 0, incorrect_item = 0, country = "Eatland",
-  
-  # Scenario: Cancellation
-  web_form = 0, chat = 0, email = 0, cancellation = 1, incorrect_item = 0, country = "Eatland",
-  
-  # Scenario: Incorrect Item
-  web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 1, country = "Eatland",
-  
-  # Scenario: Country is Drinkland
-  web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, country = "Drinkland",
-  
-  # Scenario: Interaction Chat & Incorrect Item
-  web_form = 0, chat = 1, email = 0, cancellation = 0, incorrect_item = 1, country = "Eatland"
-)
-
-# Transponer el dataframe para que cada fila sea un escenario
-escenarios <- as.data.frame(t(escenarios))
-rownames(escenarios) <- NULL # Limpiar los nombres de las filas
-
-# =======================================================
-# Paso 3: Predecir las probabilidades y sus intervalos de confianza
-# =======================================================
-
-# Probabilidad de la línea base
-pred_base <- predict(binomial.model.c, newdata = referencia, type = "response")
-prob_base_pct <- pred_base * 100
-
-# Probabilidades de los escenarios
-pred_escenarios <- predict(binomial.model.c, newdata = escenarios, type = "response")
-prob_escenarios_pct <- pred_escenarios * 100
-
-# =======================================================
-# Paso 4: Calcular la diferencia absoluta y sus intervalos de confianza
-# =======================================================
-
-diferencia_absoluta_pp <- prob_escenarios_pct - prob_base_pct
-
-# NOTA: Calcular el intervalo de confianza para la diferencia absoluta es complejo.
-#       Para tu propósito, es suficiente mostrar el intervalo para cada probabilidad,
-#       ya que si no se solapan, la diferencia es estadísticamente significativa.
-#       El código anterior era demasiado complejo y era la fuente de los errores.
-
-# =======================================================
-# Paso 5: Unir todo en un dataframe final y ordenar
-# =======================================================
-
-# Crear el dataframe de resultados
-results_df <- data.frame(
-  Escenario = c(
-    "Web Form", "Chat", "Email", "Cancellation", 
-    "Incorrect Item", "Country: Drinkland", "Chat & Incorrect Item"
-  ),
-  Probabilidad_Base = prob_base_pct,
-  Probabilidad_Escenario = prob_escenarios_pct,
-  Diferencia_Absoluta = diferencia_absoluta_pp
-)
-
-# Ordenar los resultados para una mejor visualización
-results_df <- arrange(results_df, desc(Diferencia_Absoluta))
-
-# Imprimir la tabla final
-print(results_df)
-
-```
 
 
 
 
 
 
-```{r}
-coefplot(binomial.model.c, intercept = FALSE, exp = TRUE,
-         ylab= "Customer Service Factors",
-         xlab = "Odds Ratio of Becoming a Detractor (vs. Baseline)")
-```
 
 
 
 
-```{r}
-
-# 2. Obtener los coeficientes y sus CIs (en escala de log-odds)
-coefs <- summary(binomial.model.c)$coefficients
-cis <- confint(binomial.model.c)
-
-# 3. Crear un dataframe con los datos
-plot_data <- data.frame(
-  term = rownames(coefs),
-  estimate = coefs[, "Estimate"],
-  conf_low = cis[, 1],
-  conf_high = cis[, 2]
-)
-
-# Eliminar el intercepto del dataframe
-plot_data <- plot_data[-1,]
-
-# 4. Exponentiar todos los valores a la escala de Odds Ratio
-plot_data$estimate <- exp(plot_data$estimate)
-plot_data$conf_low <- exp(plot_data$conf_low)
-plot_data$conf_high <- exp(plot_data$conf_high)
-
-# 5. Crear el gráfico con ggplot2
-ggplot(plot_data, aes(x = estimate, y = term)) +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "darkgrey") +
-  geom_errorbarh(aes(xmin = conf_low, xmax = conf_high), height = 0.2) +
-  geom_point(size = 3) +
-  scale_x_continuous(trans='log10') + # Opcional: usar escala logarítmica para el eje x para mejor visualización
-  labs(
-    x = "Odds Ratio (vs. Baseline)",
-    y = "Customer Service Factors",
-    title = "Impacto de los factores en la probabilidad de ser detractor"
-  ) +
-  theme_minimal()
-
-```
 
 
-SEGUIR AQUÍ
-
-- Graphs: relative risk (con y sin relativizar por numero de llamadas) + bargraphs (con y sin relativizar por numero de llamadas - tipo mosaic plot pero en lugar del numero de personas numero de llamadas)
 
 
 
