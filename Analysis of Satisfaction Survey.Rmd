@@ -1022,11 +1022,11 @@ Based on our analysis, the status variable does not have a significant impact on
 
 
 
-### 2.3.3. Results Interpretation: Extent With Which Each CS Factors is Associated with Detractors
+### 2.3.3. Creating Metrics to Interpret the Model
 
-This section uses the information from the logistic regression model above to provide metrics of how much each factor is associated with customers becoming detractor, including metrics like the odds ratios, the relative proportion, and the absolute percentage change. For the predicted proportions, we need to create a matrix about cases that represent the individual presence of the factors and the presence of the intercept. 
+This section uses the information from the logistic regression model above to provide metrics of how much each factor is associated with customers becoming detractor, including metrics like the odds ratios, the relative proportion, the predicted proportion, and the differences in the predicted proportions. 
 
-We start specifying this matrix: 
+For the predicted proportions, we need to create a matrix about cases that represent the individual presence of the factors and the presence of the intercept. We start specifying this matrix: 
 
 ```{r}
 
@@ -1061,10 +1061,9 @@ str(my.matrix.df)
 
 ```
 
-Next, we create a formula to obtain the odds ratios, relative proportions, predicted proportions, and absolute changes from the predicted proportions from the binomial model and the specified matrix. 
+Next, we create a function to obtain the metrics we are interested in from the binomial model and the specified matrix. Specifically, we will obtain odds ratios, relative proportions, predicted proportions, and absolute differences for the predicted proportions 
 
-The formula also provides the 95% confidence intervals for these metrics. For calculating the confidence intervals for the differences in the predicted proportion, we employ parametric bootstrap simulations. 
-
+The formula also provides the 95% confidence intervals for these metrics. Please note that, for calculating the confidence intervals for the differences in the predicted proportion, we employ parametric bootstrap simulations. 
 
 
 ```{r}
@@ -1149,15 +1148,15 @@ f.metrics.binomial <- function(my.model, my.matrix){
   
   #-------- 6. Combining the results in a dataframe
   
-  #Combining all metrics
+  #Combining all metrics, and expressing predictions and predicted differences in percentages
   results <- data.frame(
     Term = names(rp),
-    Prediction = as.numeric(predicted_prob),
-    Lower_Prediction = as.numeric(lower_predicted_prob),
-    Upper_Prediction = as.numeric(upper_predicted_prob),
-    Predicted_Change = as.numeric(prob_diff),
-    Lower_Predicted_Change = as.numeric(lower_prob_diff),
-    Upper_Predicted_Change = as.numeric(upper_prob_diff),
+    Prediction = as.numeric(predicted_prob)*100,
+    Lower_Prediction = as.numeric(lower_predicted_prob)*100,
+    Upper_Prediction = as.numeric(upper_predicted_prob)*100,
+    Predicted_Change = as.numeric(prob_diff)*100,
+    Lower_Predicted_Change = as.numeric(lower_prob_diff)*100,
+    Upper_Predicted_Change = as.numeric(upper_prob_diff)*100,
     Relative_Probability = as.numeric(rp),
     Lower_Relative_Probability = as.numeric(rp_ci_low),
     Upper_Relative_Probability = as.numeric(rp_ci_high),
@@ -1187,313 +1186,147 @@ f.metrics.binomial <- function(my.model, my.matrix){
 
 
 
-Now we are ready to apply the function to our model: 
+Now we are ready to apply the function to our model to obtain our metrics: 
 
 ```{r}
 #Application of the function to our binomial model
 model.metrics.df <- f.metrics.binomial (binomial.model.c, my.matrix.df)
 model.metrics.df
+
 ```
 
 
-For better interpretability, we rearrange the order of the results by percentage change
+For making the interpretations easier, we rearrange the order of the results by the predicted differences: 
 
 ```{r}
-#Arrange results from greater percentage change to lower
+#Arrange results from greater percentage change to lower, leaving the intercept above the dataframe:
 int.df <- model.metrics.df[1,]
 factors.df <- arrange(model.metrics.df[-1,], desc(Predicted_Change))
-ordered.model.metrics.df <- bind_rows(int.df, factors.df)
-ordered.model.metrics.df
+ord.model.metrics.df <- bind_rows(int.df, factors.df)
+ord.model.metrics.df
 
 ```
 
 
-
-
-
-OBTAINING THE PREDICTED PROBABILITIES AND THEIR CONFIDENCE INTERVALS
-
-
-```{r}
-#Calculate log-odds and standard errors
-pred <- predict(my.model, newdata = my.matrix.df, type = "link", se.fit = TRUE)
-
-#Calculate confidence intervals in log-odds
-lower_logit <- pred$fit - 1.96 * pred$se.fit
-upper_logit <- pred$fit + 1.96 * pred$se.fit
-
-
-#Transform to probabilities, using a function
-f.inv_logit <- function(x) {1 / (1 + exp(-x))}
-
-predicted_prob <- f.inv_logit(pred$fit) # Predicted probabilities
-lower_predicted_prob <- f.inv_logit(lower_logit) # Lower limit of CI for predicted probabilities
-upper_predicted_prob <- f.inv_logit(upper_logit) # Upper limit of CI for predicted probabilities
-
-predicted_prob
-lower_prob 
-upper_prob 
-
-```
-
-
-OBTAINING THE DIFFERENCES OF THE EXPECTED PERCENTAGES AND THEIR CONFIDENCE INTERVALS
-We employ parametric bootstrap simulations to estimate the differences in detractor percentages linked to the presence of key factors
+We can also facilitate interpretation by creating labels that are easy to understand:
 
 ```{r}
 
-# Simulate a distribution of log-odds, for example with 10000 cases
-set.seed(123)
-simulated_log_odds <- as.data.frame(matrix(
-  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
-  ncol = length(pred$fit), byrow = TRUE
-))
-
-# Transform logg-odds to expected probabilities
-simulated_probs <- f.inv_logit(simulated_log_odds)
-
-# 4. Calculate differences from the first column that correspond to the intercept probabilities
-diffs <- apply(simulated_probs, 2, function(col){
-  col - simulated_probs[[1]]
-})
-
-# 5. Calculate the means of the differences and 95% CI with percentiles
-perc_diff <- colMeans(diffs)
-lower_perc_diff  <- apply(diffs, 2, quantile, probs = 0.025)
-higher_perc_diff <- apply(diffs, 2, quantile, probs = 0.975)
-
-perc_diff
-lower_perc_diff
-higher_perc_diff
-
-```
-
-k
-
-
-
-
-
-
-```{r}
-
-
-# 2. Simular log-odds muchas veces (por ejemplo, 10000 veces)
-set.seed(123)
-simulated_log_odds <- matrix(
-  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
-  ncol = length(pred$fit), byrow = TRUE
-)
-
-# 3. Transformar a probabilidad
-simulated_probs <- f.inv_logit(simulated_log_odds)
-
-# 4. Calcular diferencias respecto al intercepto (primera fila)
-diffs <- sweep(simulated_probs, 1, simulated_probs[,1], "-")
-
-# 5. Calcular percentiles para IC al 95%
-perc_diff <- colMeans(diffs)
-lower_perc_diff  <- apply(diffs, 2, quantile, probs = 0.025)
-higher_perc_diff <- apply(diffs, 2, quantile, probs = 0.975)
-
-perc_diff
-lower_perc_diff
-higher_perc_diff
-
-```
-
-
-
-
-
-Using this model, we calculate the odds ratios of the coefficients and their confidence intervals: 
-
-```{r}
-
-
-
-```
-Based on our analysis, we can now clearly identify the primary drivers that increase a customer's odds of becoming a detractor. Examples of key findings to discuss with stakeholders are:
-
-- Among the different contact channels, email is the most significant individual driver. It increases the odds of a customer becoming a detractor by 72% (95% CI: 62%, 83%) compared to contacting by telephone.
-
-- An important driver of customer dissatisfaction is the synergy between chat and an incorrect item. This combination adds an extra 180% increase to the odds of a customer becoming a detractor (95% CI: 152%, 210%), on top of the individual effects of each of these two factors.
-
-We can also obtain the relative risk, which is more intuitive than the odds ratio
-
-```{r}
-#We create a formula to obtain the percentage change, relative probabilities, and odds ratios
-
-f.metrics.binomial <- function(my.model){
-  
-  # Making sure the model is glm binomial
-  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
-    stop("The function requires a binomial model.")
-  }
-  
-  # Obtaining the coefficients and confidence intervals
-  coefs <- coef(my.model)
-  ci <- confint(my.model)
-  intercept <- coefs[1]
-  
-  
-  # Exponentiation of the coefficients and CIs to obtain odds ratios
-  or <- exp(coefs)
-  or_ci <- exp(ci)
-  
-  # 3. Calculating the base probability from the intercept
-  p0 <- or[1] / (1 + or[1])
-  
-  # 4. Obtaining relative probabilities from risk ratios and base probability
-  rp <- or / ((1 - p0) + (p0 * or))
-  
-  # 5. Aplying the same formula to obtain the limits of the confidence intervals for the relative probabilities
-  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
-  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
-  
-  # 6. Obtaining the probability changes and their confidence intervals
-  pch <- (rp -1)
-  pch_ci_low <- (rp_ci_low -1)
-  pch_ci_high <- (rp_ci_high -1)
-  
-  #7. Obtaining the absolute changes
-  p.ab.ch <- p0*rp - p0
-  
-  # 6. Combining the results in a dataframe
-  results <- data.frame(
-    Term = names(rp),
-    Percentage_Change = as.numeric(pch),
-    P.Ch_CI_Lower = as.numeric(pch_ci_low),
-    P.Ch_CI_Upper = as.numeric(pch_ci_high),
-    Odds_Ratio = as.numeric(or),
-    Relative_Probability = as.numeric(rp),
-    RP_CI_Lower = as.numeric(rp_ci_low),
-    RP_CI_Upper = as.numeric(rp_ci_high)
-
-  )
-  
-  # 7. Eliminate the intercept line
-  results.rel.prop <- results
-  
-  # 8. Arrange results from greater percentage change to lower
-  results.rel.prop <- arrange(results.rel.prop, desc(Relative_Probability))
-  
-  # 9. Return the results
-  return(results.rel.prop)
-}
-
-
-#Application of the function to our binomial model
-perc.change.df <- f.metrics.binomial(binomial.model.c)
-perc.change.df
-```
-
-
-```{r}
-#We create a formula to obtain the percentage change, relative probabilities, and odds ratios
-
-f.metrics.binomial <- function(my.model){
-  
-  # Making sure the model is glm binomial
-  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
-    stop("The function requires a binomial model.")
-  }
-  
-  # Obtaining the coefficients and confidence intervals
-  coefs <- coef(my.model)
-  ci <- confint(my.model)
-  intercept <- coefs[1]
-  
-  
-  # Exponentiation of the coefficients and CIs to obtain odds ratios
-  or <- exp(coefs)
-  or_ci <- exp(ci)
-  
-  # 3. Calculating the base probability from the intercept
-  p0 <- or[1] / (1 + or[1])
-  
-  # 4. Obtaining relative probabilities from risk ratios and base probability
-  rp <- or / ((1 - p0) + (p0 * or))
-  
-  # 5. Aplying the same formula to obtain the limits of the confidence intervals for the relative probabilities
-  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
-  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
-  
-  # 6. Obtaining the probability changes and their confidence intervals
-  pch <- (rp -1)
-  pch_ci_low <- (rp_ci_low -1)
-  pch_ci_high <- (rp_ci_high -1)
-  
-  #7. Obtaining the absolute changes
-  p.ab.ch <- p0*rp - p0
-  
-  # 6. Combining the results in a dataframe
-  results <- data.frame(
-    Term = names(rp),
-    Percentage_Change = as.numeric(pch),
-    P.Ch_CI_Lower = as.numeric(pch_ci_low),
-    P.Ch_CI_Upper = as.numeric(pch_ci_high),
-    Odds_Ratio = as.numeric(or),
-    Relative_Probability = as.numeric(rp),
-    RP_CI_Lower = as.numeric(rp_ci_low),
-    RP_CI_Upper = as.numeric(rp_ci_high)
-
-  )
-  
-  # 7. Eliminate the intercept line
-  results.rel.prop <- results[-1, ]
-  
-  # 8. Arrange results from greater percentage change to lower
-  results.rel.prop <- arrange(results.rel.prop, desc(Relative_Probability))
-  
-  # 9. Return the results
-  return(results.rel.prop)
-}
-
-
-#Application of the function to our binomial model
-perc.change.df <- f.perc_change.binomial (binomial.model.c)
-perc.change.df
-
-```
-
-
-
-We can graphically represent these results: 
-
-
-```{r}
 # We provide labels for each factor in the results dataframe: 
 
-perc.change.df$Factor.Label <- NA_character_
-perc.change.df$Factor.Label [perc.change.df$Term == "chat_incorrect_item"] <- "Incorrect item issues attended via chat"
-perc.change.df$Factor.Label [perc.change.df$Term == "email"] <- "Attended via email"
-perc.change.df$Factor.Label [perc.change.df$Term == "chat"] <- "Attended via chat"
-perc.change.df$Factor.Label [perc.change.df$Term == "web_form"] <- "Attended via web form"
-perc.change.df$Factor.Label [perc.change.df$Term == "countryDrinkland"] <- "Attention in the country Drinkland"
-perc.change.df$Factor.Label [perc.change.df$Term == "cancellation"] <- "Customers had a cancellation issues"
-perc.change.df$Factor.Label [perc.change.df$Term == "incorrect_item"] <- "Customers had incorrect items issues"
-perc.change.df # to check the results are as expected
+ord.model.metrics.df$Label <- NA_character_
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "(Intercept)"] <- "Baseline: Typical issues attended via phone in Eatland"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "chat_incorrect_item"] <- "Attention via chat of incorrect item issues"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "email"] <- "Attention via email"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "chat"] <- "Attention via chat"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "web_form"] <- "Attention via web form"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "countryDrinkland"] <- "Attention in the country Drinkland"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "cancellation"] <- "Attention of cancellation issues"
+ord.model.metrics.df$Label [ord.model.metrics.df$Term == "incorrect_item"] <- "Attention of incorrect items issues"
+ord.model.metrics.df # to check the results are as expected
+
+```
 
 
+Lastly, we can graphically represent the results to easily see which key factors in customer service are associated with more customers becoming detractors. We will especficically represent the predictions. 
 
 
+```{r}
 
-# Create the dot-and-whisker plot
-ggplot(perc.change.df, aes(x = Percentage_Change, 
-                    y = reorder(Factor.Label, Percentage_Change))) +
+# Create the dot-and-whisker plot for the predictions
+ggplot(ord.model.metrics.df, aes(x = Prediction, 
+                    y = reorder(Label, Prediction))) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
-  geom_errorbarh(aes(xmin = P.Ch_CI_Lower, xmax = P.Ch_CI_Upper), height = 0.2) +
+  geom_errorbarh(aes(xmin = Lower_Prediction, xmax = Upper_Prediction), height = 0.2) +
   geom_point(size = 3) +
+    geom_text(aes(label = paste(round(Prediction,1), "%")), 
+            vjust = -1, size = 3.5) + 
   labs(
-    title = "Impact of Customer Service Factors in Detractors Probability",
-    x = "% of Increase in Detractors Probability",
+    title = "Expected Detractors By Key Customer Service Factors",
+    x = "% of Detractors",
     y = "Customer Service Factors"
   ) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
 ```
+
+In the graph we can see that contacting with customer service through methods other than telephone is associated with more detractors, especially when contacting via email, or via chat in the specific case of solving incorrect item issues. 
+
+Customer service in the country Drinkland is also associated with more detractors than in Eatland. 
+
+Lastly, customers who contact for cancellation issues are expected to have more detractors than typical issues. 
+
+However, it is important to consider that the impact of these situations might depend on how many customers contact us for each of them. We consider this in the next section. 
+
+
+### 2.3.4. Evaluating the Impact of Customer Service Factors
+
+To evaluate the impact in terms of additional detractors associated to each customer service factors, we will ponderate the predicted proportions in detractors by the number of cases associated to each factor. 
+
+We assume that we have the following percentage of cases for each of the above factors: 
+- Baseline: attention of typical issues via phone in Eatland: 10%
+- Attention via chat of incorrect item issues: 10%
+- Attention via email: 20%
+- Attention via chat: 40%
+- Attention via web form: 5%
+- Attention in the country Drinkland: 50%
+- Attention of cancellation issues: 5%
+- Attention of incorrect items issues: 30%
+
+
+We create impact variables by ponderating the predicted percentages of detractors and the differences in these percentages across factors: 
+
+```{r}
+
+
+#Create a variable specifying the proportion of cases
+ord.model.metrics.df$prop.cases <- c(.10,.10, .20, .40, .05, .50, .05, .30)
+
+#Create the impact variables
+variables_to_mutate <- c( "Prediction",
+                          "Lower_Prediction",
+                          "Upper_Prediction", 
+                          "Predicted_Change",
+                          "Lower_Predicted_Change",
+                          "Upper_Predicted_Change"
+)
+
+for(variable in variables_to_mutate){
+  new_col <- paste0("Impact_", variable)
+  ord.model.metrics.df[[new_col]] <-  ord.model.metrics.df[["prop.cases"]] * ord.model.metrics.df[[variable]]
+}
+
+# Check the results
+ord.model.metrics.df
+
+```
+
+We can graphically represent the results for the additional predictors associated to each customer service factor
+ 
+
+```{r}
+
+# Create the dot-and-whisker plot for the additional detractors associated to each case.
+ggplot(ord.model.metrics.df [-1,], aes(x = Impact_Predicted_Change, 
+                    y = reorder(Label, Impact_Predicted_Change))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
+  geom_errorbarh(aes(xmin = Impact_Lower_Predicted_Change, xmax = Impact_Upper_Predicted_Change), height = 0.2) +
+  geom_point(size = 3) +
+    geom_text(aes(label = paste(round(Impact_Predicted_Change, 1), "%")), 
+            vjust = -1.5, size = 3.5) + 
+  labs(
+    title = "Impact of Key Customer Service Factors",
+    x = "% of Additional Detractors Compared to Baseline",
+    y = "Customer Service Factors"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
+
+
+
 
 SEGUIR AQUÍ: 
 Opción A) Ver si puedo ponderar los resultados de la gráfica anterior por el número de casos. Tengo dudas, porque la probabilidad de ser un detractor (el intercepto) cambia en función del número de casos asociados a ese intercepto. ¿o no? yo creo que sería independiente...pues asumo que si he dicho que aumentan un 5% respecto a la base inicial, si sé que ese 5% de incremento sólo ocurre en el 10% de los casos, entonces ya lo tengo, es un impacto de 0.5% de incremento en el porcentaje inicial de detractores. Lo que ya no sé es si aplica a los intervalos de confianza. 
@@ -1505,6 +1338,9 @@ Ver si puedo calcular los incrementos absolutos en el porcentaje de detractores 
 
 
 Diferencias absolutas
+
+
+
 
 
 ```{r}
