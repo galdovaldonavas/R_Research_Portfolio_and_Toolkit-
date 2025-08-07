@@ -721,44 +721,17 @@ cor(merged.heatmaps[, 3:5], use = "complete.obs")
 All three measures show strong correlations (r > 0.90), providing additional confidence that the NPS is a valid measure and that important patterns are not missed by relying on any single metric.
 
 
-## 2.3. Statistical Models about Factors Related to Probability to Promote. 
+## 4.3. Modeling Key Factors Associated with the Probability to Promote the Brand
 
-While the visualization of the heatmaps was already informing us about important aspects in which customer service is performing lower, we further explore these relations with statistical models.
-
-### 2.3.1. Building an Ordinal logistic model. 
-
-We consider that an ordinal logistic model is more appropriate than a lineal model because our variable to predict, nps scores, is an ordinal variable in which it is difficult to assume similar distances across all of the scores, specially due to the ceiling and floor effects that we infer from its distribution (see section x). 
-
-Furthermore, a linear model would not fulfill the assumption for the normality of residuals, as we can see in the QQ plots below, even when we use a square transformation of the variable.  
-
-```{r}
-#Checking normality and homocedasticy of residuals of the linear model
-linear.model <- lm (nps.score ~ method + reason + country, data =data)
-par(mfrow =c(2,2))
-plot(linear.model)
-
-#Checking normality and homocedasticy of residuals of the linear model with the squared transformation
-linear.model.sq <- lm ((nps.score^2) ~ method + reason + country, data =data)
-par(mfrow =c(2,2))
-plot(linear.model.sq)
-
-```
+While the heatmaps provided valuable visual insights into areas where customer service performance appears to be lower, statistical modeling is necessary to formally quantify these relationships.
 
 
-As we can see in the Q-Q plots, the residuals' distributions differ strongly from the hypothetical normal distribution. 
+###4.3.1.  Setting Reference Levels for Factor Categories
 
-At this point, we also considered that an ordinal model was preferable than a binomial logistic regression, because it would provide information about the effects of the factors across the whole NPS scale, rather than just on a single NPS category.  
-
-It is important to note that we also had the option to use a 
-For all of these reasons, we proceed with ordinal logistic regression. 
-
-
-###2.3.1.1. Setting References across the Categories of the Factors
-
-Just to make the interpretation more intuitive, we set the levels of our factors in a way that the levels with higher nps scores are specified first (following the heatmap we calculated earlier). That way, the best levels will be used as reference to compare the effect of the others. 
-
+To make the interpretation of model coefficients more intuitive, we set the reference levels of our categorical predictors based on the heatmap results. Specifically, we use the levels associated with higher NPS scores as the reference. This allows us to interpret model outputs as comparisons against the best-performing category for each factor.
 
 ```{r}
+# Set the order of the factor levels
 data$method <- factor(data$method, levels = c("phone", "web_form", "chat", "email"))
 data$reason <- factor(data$reason, levels = c("other","status", "delay", "cancellation", "incorrect_item"))
 data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
@@ -766,343 +739,330 @@ data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
 ```
 
 
+### 4.3.1. Discarding a Linear Regression Model. 
 
-### 2.3.1.2. Checking the collinearity assumption
+We discard the linear model because our outcome variable, NPS score, is ordinal in nature, and it is difficult to assume equal distances between adjacent scores given the ceiling and floor effects observed in its distribution (see Section 4.1.1).
 
-We check the collinearity across our categorical factors using visual representations and VIF scores.
+In addition, a linear model fails to meet key assumptions like the normality of residuals, as shown in the Q-Q plots below, even when we apply a square transformation to the dependent variable. 
 
 ```{r}
-# Mosaic plot to visualize the relations between factors (using the vcd package)
-doubledecker(with(data, table(country, reason, method )))
 
-# VIF coefficients, extracted from the linear model we calculated in section x (using the car package)
+#Set the configuration to see 4 plots in the same window: 
+par(mfrow = c(2, 2)) 
+
+# Check normality and homoscedasticity of residuals for the linear model
+linear.model <- lm(nps.score ~ method + reason + country, data = data)
+plot(linear.model)
+
+# Check the same for a squared transformation of the dependent variable
+linear.model.sq <- lm((nps.score^2) ~ method + reason + country, data = data)
+plot(linear.model.sq)
+
+```
+
+As shown in the Q-Q plots, the distribution of residuals deviates substantially from the theoretical normal distribution.
+
+
+### 4.3.2. Evaluating the Appropriateness of an Ordinal Model
+
+We prioritize testing an ordinal logistic model over a binomial logistic model, as it allows us to estimate the effects of our predictors across the full NPS scale, rather than focusing on a single outcome category (e.g., detractors).
+
+However, before proceeding, we need to check whether key assumptions of this model are met—particularly the absence of multicollinearity and the proportional odds assumption across the levels of our dependent variable.
+
+
+### 4.3.2.1. Checking the Collinearity Assumption
+
+We assess potential collinearity among our categorical predictors using both visualizations and statistical diagnostics.
+
+```{r}
+# Mosaic plot to visualize the relationships between categorical factors (vcd package)
+doubledecker(with(data, table(country, reason, method)))
+
+# VIF scores from the linear model previously computed (car package)
 vif(linear.model)
 
 ```
 
-The VIF analysis indicates an absence of multicollinearity among our predictors. For all factors, we used the the GVIF^(1/(2*Df)) values, the most appropriate metric for comparing predictors with different numbers of categories—are extremely close to 1.0.
+The VIF analysis shows no indication of multicollinearity among the predictors. Specifically, the adjustment of the Generalized Variance Inflation Factors (GVIF^(1/(2*Df))), which allows for the comparison of categorical variables with different degrees of freedom, yields values that are all very close to 1.0.
 
-This finding is further supported by the mosaic plot, which visually demonstrates that the frequencies of one factor are consistent across the levels of the other factors, showing no strong interdependencies
-
-
-
-##### 2.3.1.3. Checking the Proportional odds assumption
+This statistical result is further supported by the mosaic plot, which shows no strong associations between the levels of the factors. The distribution of frequencies appears relatively uniform across these levels.
 
 
-Before testing this assumption we create dummy variables for the factors with multiple categories, so we can see the results of the proportional odds separately for each of the variables. 
+##### 4.3.2.2. Checking the Proportional Odds Assumption
 
-We also make sure our dependent variable is specified as ordinal
+Before testing the proportional odds assumption, we create dummy variables for the factors with multiple categories. This allows us to assess the assumption separately for each category.
+
+We also ensure that our dependent variable, the NPS score, is properly defined as an ordinal factor.
 
 ```{r}
 
-# Dummy variables for method, using phone as the reference
-data$chat <- NA_real_
-data$chat[data$method == "chat"] <- 1
-data$chat[!(data$method == "chat")] <- 0
+# Dummy variables for method (reference: phone)
+data$chat <- ifelse(data$method == "chat", 1, 0)
+data$email <- ifelse(data$method == "email", 1, 0)
+data$web_form <- ifelse(data$method == "web_form", 1, 0)
 
-data$email <- NA_real_
-data$email[data$method == "email"] <- 1
-data$email[!(data$method == "email")] <- 0
+# Dummy variables for reason (reference: other)
+data$delay <- ifelse(data$reason == "delay", 1, 0)
+data$cancellation <- ifelse(data$reason == "cancellation", 1, 0)
+data$incorrect_item <- ifelse(data$reason == "incorrect_item", 1, 0)
+data$status <- ifelse(data$reason == "status", 1, 0)
 
-data$web_form <- NA_real_
-data$web_form[data$method == "web_form"] <- 1
-data$web_form[!(data$method == "web_form")] <- 0
-
-# Dummy variables for reason, using status as the reference
-data$delay <- NA_real_
-data$delay[data$reason == "delay"] <- 1
-data$delay[!(data$reason == "delay")] <- 0
-
-data$cancellation <- NA_real_
-data$cancellation[data$reason == "cancellation"] <- 1
-data$cancellation[!(data$reason == "cancellation")] <- 0
-
-data$incorrect_item<- NA_real_
-data$incorrect_item[data$reason == "incorrect_item"] <- 1
-data$incorrect_item[!(data$reason == "incorrect_item")] <- 0
-
-data$status <- NA_real_
-data$status[data$reason == "status"] <- 1
-data$status[!(data$reason == "status")] <- 0
-
-
-# Register the nps score as an ordinal factor
-data$nps.score <- factor( data$nps.score, levels = 0:10, ordered = TRUE)
+# Register the NPS score as an ordinal factor
+data$nps.score <- factor(data$nps.score, levels = 0:10, ordered = TRUE)
 
 ```
 
-
-
-We check the proportional odds assumption with the ordinal package
+We now test the proportional odds assumption using the ordinal package.
 
 ```{r}
 
+# Specify the ordinal logistic regression model with main effects
+ordinal.model <- clm(nps.score ~ web_form + chat + email + delay + status + cancellation + incorrect_item + country, data = data)
 
-#Specify the basic ordinal model with the main effects
-ordinal.model <- clm(nps.score ~ web_form + chat + email + delay + status + cancellation + incorrect_item  + country, data = data)
-summary (ordinal.model)
-#Check the proportional odds assumption
+# Summary of the model
+summary(ordinal.model)
+
+# Test of the proportional odds assumption
 nominal_test(ordinal.model)
 
-
-
 ```
 
-The results indicate that, with the exception of web_form, all the factors for contact methods and contact reasons violate the proportional odds assumption, that is, that their effects on a customer's NPS score is not consistent across the entire 0-10 scale.
+The results suggest that the proportional odds assumption is violated for most of the predictors (all except contacting via web form and contacting for cancellation issues). This implies that the effect of these predictors varies depending on which threshold along the NPS scale is considered.
+
+We will inspect several ways to solve this issue.  
 
 
-Attending to this, we will check if this issue can be corrected by incorporating interactions between the method and reason factors that we have identified in our heatmap. We can also see if simplifying the model can help
+###### 4.3.2.2.1 Addressing Non-Proportional Odds by Incorporating an Interaction Term
 
-If not, we will try a more flexible model that calculate separate set of coefficients for method and reason at each threshold of the nps scores.
+To address the observed violation of the proportional odds assumption, we explore the inclusion of a theoretically meaningful interaction in the model.
 
+In the heatmaps, we identified a strong interaction: customers who contacted customer service via chat regarding incorrect item deliveries showed particularly low NPS scores. Including this interaction in the model may not only improve interpretability but also help address the previously observed violations of the proportional odds assumption for the method and reason factors.
 
-##### 2.3.1.3 Addressing Non-Proportional Odds by Incorportating Interactions into the Model
-
-In the heatmaps we observed an important interaction: customers contacting through chat for incorrect item deliveries feel very low probability to promote our customer service. 
-
-The incorporation of this interaction to the model not only can be informative, it could eliminate the non-proportional odds that we had identified for the method and the reason factors. 
-
-We create this model using the ordinal package: 
+We begin by evaluating whether this model that includes the interaction term offers a more parsimonious and appropriate fit:
 
 ```{r}
 
-# Prior step: creation of a dicotomous variable to account for the interaction: whether cases are due to incorrect item cases and attended by chat
-
+# Step 1: Create a binary variable for the interaction between 'chat' and 'incorrect_item'
 data$chat_incorrect_item <- NA_real_
 data$chat_incorrect_item[data$method == "chat" & data$reason == "incorrect_item"] <- 1
 data$chat_incorrect_item[!(data$method == "chat" & data$reason == "incorrect_item")] <- 0
 
-with(data,(table(chat_incorrect_item, method, reason))) # to check the variable has been created as expected
+# Check that the variable has been created correctly
+with(data, table(chat_incorrect_item, method, reason))
 
-# We build the ordinal logistic model with the ordinal package: 
-ordinal.model.int <-  clm(nps.score ~ web_form + chat + email + delay + status + cancellation + incorrect_item  + country + chat_incorrect_item,  data = data) 
+# Step 2: Build the ordinal logistic model including the interaction term
+ordinal.model.int <- clm(nps.score ~ web_form + chat + email + delay + status + cancellation + incorrect_item + country + chat_incorrect_item, data = data)
 
+# Review model summary
 summary(ordinal.model.int)
 
+# Step 3: Compare the models with and without the interaction
 anova(ordinal.model, ordinal.model.int)
 
 
 ```
 
+The model shows that the interaction is significant, and the likelihood ratio test indicates a statistically significant improvement in model fit after incorporating the interaction (chi-squared test p < .001 and a lower AIC of 181193 compared to 181834 for the simpler model).
 
-
-```{r}
-
-```
-
-The model shows that the interaction is significant. Furthermore, the likelihood ratio test indicate a statistically significant improvement in model fit for the more complex model that includes the chat_incorrect_item interaction. This is supported by a significant chi-squared test (p < 2.2e-16) and a significantly lower AIC (161,578.4) compared to the simpler model with only main effects (AIC = 161,830.7). 
-
-
-Now, let's check if the proportional odds assumption of the new model is fulfilled
-
+Next, we proceed to check the proportional odds assumption for the updated model:
 
 ```{r}
 
-#Check the proportional odds assumption
+# Check the proportional odds assumption using the ordinal package
 nominal_test(ordinal.model.int)
+
 ```
 
-The inclusion of the interaction has improved the fulfillment of the proportional odds for some factors. It is now fulfilled for the contact reason of delay. Since this factor is not associated with a significant difference in comparison with the other contact reasons used as a reference, we could take it away from the model. 
+After including the interaction, the proportional odds assumption is now satisfied for the contact reason delay. However, it remains violated for most other factors.
 
-However, non proportional odds are still problematic for other contact reasons and contact methods. To further explore how these non proportional odds are acting we visualize jitter plots with the ggplot2 package: 
+To address this, we will explore a model that allows coefficients to vary across thresholds for predictors that violate the assumption.
 
-```{r}
 
-#Reusable function for combining jitter plots and box plots: 
+###### 4.3.2.2.2 Addressing Non-Proportional Odds by Modeling Varying Coefficients
 
-f.nps.jitter_box <- function (my.data, my.factor, my.dv){
-  ggplot(my.data, aes(x = factor(.data[[my.factor]]), y = as.numeric(as.character(.data[[my.dv]])))) +
-  geom_jitter(width = 0.4, alpha = 0.1, color = "blue") + # Adjusted width and alpha for clarity
-  geom_boxplot(alpha = 0, outlier.shape = NA) + # Add transparent boxplots to show median/quartiles
-  labs(title = paste("NPS Score by", my.factor),
-       y = my.dv,
-       x = my.factor) +
-  theme_minimal() +
-  scale_y_continuous(breaks = 0:10) + # Ensure all NPS scores are ticks
-  scale_x_discrete(labels = c("No", "Yes"))
-}
+We fit a model that relaxes the proportional odds assumption for selected predictors, allowing their effects to differ at each NPS score interval, using the VGAM package.
 
-#Application of the function to each factor
-
-# For people contacting through chat:      
-f.nps.jitter_box(data, "chat", "nps.score")
-
-# For people contacting through email
-f.nps.jitter_box(data, "email", "nps.score")
-
-# For people contacting for status issues
-f.nps.jitter_box(data, "status", "nps.score")
-
-# For people contacting for cancellation issues
-f.nps.jitter_box(data, "cancellation", "nps.score")
-
-# For people contacting for incorrect item issues
-f.nps.jitter_box(data, "incorrect_item", "nps.score")
-
-# For people contacting for incorrect item issues via chat
-f.nps.jitter_box(data, "chat_incorrect_item", "nps.score")
-```
-The graphs illustrate that the influence of the factors that do not fulfill the proportional odds assumption appears to be stronger in the lower intervals of the NPS scale (i.e., differences more marked in the first quartile and below it). That is, the factors appear to have effect in the creation of detractors.  
-
-To better address these non-proportional odds, we will try to account for them in our model. 
-
-##### 2.3.1.4. Addressing Non-Proportional Odds by Accounting for Them in the Models
-
-We build a model that assumes that the influence of factors with non-proportional odds can have different coefficients for each interval of the NPS scores, using the VGAM package
-
-We also take away from the model the factor of contacting for delays, since this factor fulfilled proportional odds and was not associated with significant differences in the nps scores. 
+Since delay met the proportional odds assumption and showed no significant effect, we exclude it from this model.
 
 ```{r}
-
-
-# Model where SOME predictors are assumed to be not proportional
-ordinal.non_proportional.model.int <- vglm(
-  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item,
+# Model allowing some predictors to have non-proportional effects
+ordinal.model.int.non_proportional <- vglm(
+  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item + country + chat_incorrect_item,
   family = cumulative(link = logitlink, parallel = ~ country + web_form),
   data = data
 )
 
-summary(ordinal.non_proportional.model.int) 
+summary(ordinal.model.int.non_proportional)
 ```
-The model did not fit correctly, and it is showing warnings that it is over-predicting some outcomes, leading to unstable calculations.
-
-We will try a simple model in which we only assume as non-proportional in the ones in which this lack of odds proportionality is higher: the contact reason of incorrect items, and the interaction factor of incorrect items attended by chat: 
 
 
+The previous model did not converge properly and generated warnings about over-predicting certain outcomes, resulting in unstable parameter estimates.
+
+To address this, we fit a simpler model that only relaxes the proportional odds assumption for the predictors with the strongest violations: the contact reason incorrect item, and the interaction term of incorrect items attended by chat.
 
 ```{r}
-# Model where fewer predictors are assumed to be not proportional
-ordinal.non_proportional.model.int2 <- vglm(
-  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item,
+
+# Model with fewer predictors allowed to have non-proportional effects
+ordinal.model.int.non_proportional2 <- vglm(
+  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item + country + chat_incorrect_item,
   family = cumulative(link = logitlink, parallel = ~ country + web_form + chat + email + status + cancellation),
   data = data
 )
 
-summary(ordinal.non_proportional.model.int2)
-
+summary(ordinal.model.int.non_proportional2)
 
 ```
 
-This model still did not fit correctly, and it is showing warnings that it is leading to unstable calculations. We will try an even more simple model in which we only assume as non-proportional the interaction factor of incorrect items attended by chat: 
 
+This model still did not fit properly and produced warnings indicating unstable parameter estimates. Next, we simplify further by assuming non-proportional odds only for the interaction factor incorrect items attended by chat:
 
 ```{r}
-# Model where only the interaction is assumed to be not proportional
-ordinal.non_proportional.model.int3 <- vglm(
-  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item,
+
+# Model where only the interaction is assumed to violate proportional odds
+ordinal.model.int.non_proportional3 <- vglm(
+  nps.score ~ web_form + chat + email + status + cancellation + incorrect_item + country + chat_incorrect_item,
   family = cumulative(link = logitlink, parallel = ~ country + web_form + chat + email + status + cancellation + incorrect_item),
   data = data
 )
 
-summary(ordinal.non_proportional.model.int3)
+summary(ordinal.model.int.non_proportional3)
+
 ```
 
-This model still did not fit correctly, indicating that our data does not work well with non proportional assumptions. 
+This model still did not fit adequately, suggesting that our data may not conform well to the non-proportional odds assumptions.
+
+Given this, we explore whether grouping categories of the NPS scale and focusing on predicting one specific group might help resolve this issue.
 
 
-### 2.3.1.5. Unsolvable limitations of the ordinal model due non-proportional odds
+###### 4.3.2.2.3.  Identifying Sections in the NPS Scale with Common Non-Proportional Odds
 
-Attending to the difficulties to assume non-proportional odds in our model, we considered that the prior ordinal model is the best model we can estimate with ordinal regression, whose summary we recall below: 
-
-```{r}
-summary (ordinal.model.int)
-```
-
-
-Yet, we should interpret this model with caution, considering that the effects represented by the coefficients are variable depending on the intervals of the nps scores. Specifically, they appear to be more intense in the lower intervals of the NPS. Attending to this, we provide a complementary model in which we estimate the probability of obtaining scores in these lowers intervals, specifically the scores from 0 to 6, which are generally considered as detractors. 
-
-
-### 2.3.2. Binomial Logistic Regression Model to Predict Detractors
-
-A binomial model to predict detractors not only is a way to bypasss the proportional odds assumption of the ordinal model,  we also expect to show the most important effects in our data, since we have observed that the effects of the factors was especially reflected in the scores of the nps below 5 (see graphs). 
-
+To better understand how non-proportional odds manifest across the NPS scale, we visualize jitter and boxplots using the ggplot2 package:
 
 ```{r}
 
-#Create a dicotomous variable for users who are detractors
+# Reusable function for combining jitter plots and boxplots in dicotomous factors
+f.nps.jitter_box <- function(my.data, my.factor, my.dv) {
+  ggplot(my.data, aes(x = factor(.data[[my.factor]]), y = as.numeric(as.character(.data[[my.dv]])))) +
+    geom_jitter(width = 0.4, alpha = 0.1, color = "blue") +  # Adjusted width and alpha for clarity
+    geom_boxplot(alpha = 0, outlier.shape = NA) +  # Transparent boxplots to show quartiles
+    labs(title = paste("NPS Score by", my.factor),
+         y = my.dv,
+         x = my.factor) +
+    theme_minimal() +
+    scale_y_continuous(breaks = 0:10) +  # Show all NPS scores on y-axis
+    scale_x_discrete(labels = c("No", "Yes"))
+}
 
+# Apply the function to relevant factors
+f.nps.jitter_box(data, "chat", "nps.score")
+f.nps.jitter_box(data, "email", "nps.score")
+f.nps.jitter_box(data, "status", "nps.score")
+f.nps.jitter_box(data, "cancellation", "nps.score")
+f.nps.jitter_box(data, "incorrect_item", "nps.score")
+f.nps.jitter_box(data, "chat_incorrect_item", "nps.score")
+
+```
+
+
+The plots show that factors violating the proportional odds assumption have stronger effects in the lower range of the NPS scale—that is, differences are more pronounced among the lower quartile and below. This suggests these factors primarily influence the formation of detractors.
+
+To address the non-proportional odds issue and focus on the NPS scale segment where these factors have the greatest impact, we will next explore a binomial logistic model predicting the presence of detractors (those whose NPS scores are 6 or below). 
+ 
+
+### 4.3.3. Binomial Logistic Regression Model to Predict Detractors
+
+Given the limitations of the ordinal model due to violated proportional odds assumptions, we consider a binomial logistic regression model more appropriate for predicting detractors. This approach is also more parsimonious and efficient, focusing specifically on the group of NPS scores most affected by our factors.
+
+Additionally, prior analyses confirmed that the non-collinearity assumptions are met.
+
+We then proceed to specify and fit our binomial model:
+
+
+```{r}
+# Step 1: Create a binary variable for detractors
 data$detractor <- NA
+data$detractor[data$nps.segment == "detractor"] <- 1
+data$detractor[data$nps.segment != "detractor"] <- 0
 
-data$detractor [data$nps.segment == "detractor"] <- 1
-data$detractor [!(data$nps.segment == "detractor")] <- 0
-
-
-# Fit the binomial model
-binomial.model <- glm(detractor ~ web_form + chat + email + status + cancellation + incorrect_item  + country + chat_incorrect_item, data = data, family = "binomial")
+# Step 2: Fit the binomial logistic regression model
+binomial.model <- glm(detractor ~ web_form + chat + email + status + cancellation + incorrect_item + country + chat_incorrect_item, data = data, family = "binomial")
 
 summary(binomial.model)
 
 ```
 
-The results are coherent with the ordinal model, but more stable and especifically focused on the presence of detractors. 
+The results are consistent with those from the ordinal model, but now with stable coefficients specifically focused on predicting the likelihood of being a detractor.
 
-The contact reason status is not showing any significant effect, so we test if we can simplify the model by removing it: 
+However, the model’s parsimony can still be improved. The contact reason status does not show any statistically significant effect, so we test whether the model can be simplified by removing this variable:
 
 ```{r}
-# Fit the binomial model cleaned for irrelevant factors
-binomial.model.c <- glm(detractor ~ web_form + chat + email + cancellation + incorrect_item  + country + chat_incorrect_item, data = data, family = "binomial")
+# Fit the binomial model excluding the non-significant status factor
+binomial.model.c <- glm(detractor ~ web_form + chat + email + cancellation + incorrect_item + country + chat_incorrect_item,
+                        data = data, family = "binomial")
 
 summary(binomial.model.c)
 
-anova(binomial.model.c, binomial.model, test ="Chisq")
+# Compare the models with and without the status factor
+anova(binomial.model.c, binomial.model, test = "Chisq")
 
 
 ```
-Based on our analysis, the status variable does not have a significant impact on predicting whether a customer will be a detractor.We will therefore remove it to simplify the model, allowing us to focus on the most relevant and actionable drivers.
+
+The likelihood ratio test confirms that removing the status variable does not significantly reduce model fit. Therefore, we simplify the model by excluding it. This allows us to focus on the most relevant and actionable predictors of detractor status.
+
+We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of detractors is associated with specific customer service factors.
 
 
+#### 4.3.3.1. Creating Metrics to Interpret the Model
+
+To interpret the results of our binomial logistic regression, we will compute several complementary metrics for each of the factors:
+
+- **Predicted percentage of detractors** for the presence of each customer service factor (while holding others constant).
+
+- **Differences in predicted percentages** compared to the baseline.
+
+- **Relative probabilities** (risk ratios).
+
+- **Odds ratios**.
+
+To calculate the predicted proportions, we first need to build a design matrix that represents the isolated presence of each factor (and the intercept) in a way compatible with our model specification. This will allow us to generate predictions for each scenario separately.
 
 
-
-
-
-### 2.3.3. Creating Metrics to Interpret the Model
-
-This section uses the information from the logistic regression model above to provide metrics of how much each factor is associated with customers becoming detractor, including metrics like the odds ratios, the relative proportion, the predicted proportion, and the differences in the predicted proportions. 
-
-For the predicted proportions, we need to create a matrix about cases that represent the individual presence of the factors and the presence of the intercept. We start specifying this matrix: 
 
 ```{r}
-
 #####
-#Design Matrix for Predictions
+# Design Matrix for Predictions
 #####
 
 # Extract the factor names from the model, with and without the intercept
-f.names.interc <- names(coef(my.model))
-f.names <- f.names.interc [-1]
+f.names.interc <- names(coef(binomial.model.c))
+f.names <- f.names.interc[-1]
 
-
-# Create a design matrix representing the individual presence of the factors and the intercept 
+# Create a matrix with 1s on the diagonal (each case represents one factor set to 1)
 my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
-my.matrix.df [,1] <- f.names.interc
+my.matrix.df[, 1] <- f.names.interc
 names(my.matrix.df) <- c("case", f.names)
 
-
-# Specify the values for the interactions
+# Correct the interaction term so its components are also activated
 my.matrix.df$chat[my.matrix.df$case == "chat_incorrect_item"] <- 1
 my.matrix.df$incorrect_item[my.matrix.df$case == "chat_incorrect_item"] <- 1
 
-
-# Make sure the variables are expressed like in the original dataset. We correct it for country: 
+# Ensure factor variables match the dataset format: we need to do it for country. 
 names(my.matrix.df)[names(my.matrix.df) == "countryDrinkland"] <- "country"
-my.matrix.df$country[my.matrix.df$country==1] <-"Drinkland"
-my.matrix.df$country[my.matrix.df$country==0] <-"Eatland"
-my.matrix.df$country<-as.factor(my.matrix.df$country)
+my.matrix.df$country[my.matrix.df$country == 1] <- "Drinkland"
+my.matrix.df$country[my.matrix.df$country == 0] <- "Eatland"
+my.matrix.df$country <- as.factor(my.matrix.df$country)
 
-#Make sure the results are as expected
+# Quick check of the structure
 str(my.matrix.df)
 
 ```
 
-Next, we create a function to obtain the metrics we are interested in from the binomial model and the specified matrix. Specifically, we will obtain odds ratios, relative proportions, predicted proportions, and absolute differences for the predicted proportions 
-
-The formula also provides the 95% confidence intervals for these metrics. Please note that, for calculating the confidence intervals for the differences in the predicted proportion, we employ parametric bootstrap simulations. 
-
+We then create a function to compute the metrics and their 95% confidence intervals. Confidence intervals for differences in predicted proportions are estimated via parametric bootstrap simulations
 
 ```{r}
 #####
-#Formula to obtain metrics to interpret a binomial logistic model
+#Function to obtain key interpretation metrics for a binomial logistic model
 #####
 
 
@@ -1116,7 +1076,7 @@ f.metrics.binomial <- function(my.model, my.matrix){
   }
   
   
-  #--------2. Calculation of Odds Ratios
+  #--------2. Odds Ratios
   
   # Obtaining the coefficients and confidence intervals
   coefs <- coef(my.model)
@@ -1128,7 +1088,7 @@ f.metrics.binomial <- function(my.model, my.matrix){
   or_ci <- exp(ci)
   
   
-  #--------3. Calculating the Relative Probabilities (Risk Ratios)
+  #--------3. Relative Probabilities (Risk Ratios)
   
   # Calculating the base probability from the intercept
   p0 <- or[1] / (1 + or[1])
@@ -1139,7 +1099,7 @@ f.metrics.binomial <- function(my.model, my.matrix){
   rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
   
   
-  #--------4. Calculate the Predicted Proportions
+  #--------4. Predicted Proportions
   
   # Extract log-odds and their sd for the individual presence of the factors (using the specified matrix)
   pred <- predict(my.model, newdata = my.matrix, type = "link", se.fit = TRUE)
@@ -1157,7 +1117,7 @@ f.metrics.binomial <- function(my.model, my.matrix){
   upper_predicted_prob <- f.inv_logit(upper_logit) # Upper limit of CI for predicted probabilities
 
   
-  #--------5. Differences of the Predicted Proportions in Comparison to the Intercept
+  #--------5. Differences in Predicted Probabilities via Bootstrap
 
   # Simulate a distribution of log-odds, for example with 10000 cases
   set.seed(123)
@@ -1180,9 +1140,8 @@ f.metrics.binomial <- function(my.model, my.matrix){
   upper_prob_diff <- apply(diffs, 2, quantile, probs = 0.975)
   
   
-  #-------- 6. Combining the results in a dataframe
+  #-------- 6. Combine Results
   
-  #Combining all metrics, and expressing predictions and predicted differences in percentages
   results <- data.frame(
     Term = names(rp),
     Prediction = as.numeric(predicted_prob)*100,
@@ -1199,7 +1158,7 @@ f.metrics.binomial <- function(my.model, my.matrix){
     Upper_Odds_Ratio = as.numeric(or_ci[,2])
 )
   
-  # Deleting values assigned to the intercept that have no interpretation
+  # Remove meaningless metrics for intercept
   results[1, c("Predicted_Change",
              "Lower_Predicted_Change",
              "Upper_Predicted_Change",
@@ -1218,52 +1177,61 @@ f.metrics.binomial <- function(my.model, my.matrix){
 
 ```
 
-
-
-Now we are ready to apply the function to our model to obtain our metrics: 
+Now we can apply the function to our final binomial model in order to generate the set of metrics described above. 
 
 ```{r}
-#Application of the function to our binomial model
-model.metrics.df <- f.metrics.binomial (binomial.model.c, my.matrix.df)
+
+# Apply the function to the final binomial model
+model.metrics.df <- f.metrics.binomial(binomial.model.c, my.matrix.df)
+
+# Display the resulting metrics
 model.metrics.df
 
 ```
 
-
-For making the interpretations easier, we rearrange the order of the results by the predicted differences: 
+To facilitate interpretation, we rearrange the results in descending order of the predicted percentage change, keeping the intercept at the top of the table: 
 
 ```{r}
-#Arrange results from greater percentage change to lower, leaving the intercept above the dataframe:
-int.df <- model.metrics.df[1,]
-factors.df <- arrange(model.metrics.df[-1,], desc(Predicted_Change))
+
+# Arrange results by predicted percentage change, keeping the intercept at the top
+int.df <- model.metrics.df[1, ]
+factors.df <- arrange(model.metrics.df[-1, ], desc(Predicted_Change))
 ord.model.metrics.df <- bind_rows(int.df, factors.df)
+
+# Display the reordered results
 ord.model.metrics.df
 
 ```
 
 
-We can also facilitate interpretation by creating labels that are easy to understand:
+We can further enhance interpretability by adding clear, reader-oriented labels for each factor in the results table:
 
 ```{r}
-
-# We provide labels for each factor in the results dataframe: 
-
+# Add descriptive labels for each factor
 ord.model.metrics.df$Label <- NA_character_
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "(Intercept)"] <- "Baseline: Typical issues attended via phone in Eatland"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "chat_incorrect_item"] <- "Attention via chat of incorrect item issues"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "email"] <- "Attention via email"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "chat"] <- "Attention via chat"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "web_form"] <- "Attention via web form"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "countryDrinkland"] <- "Attention in the country Drinkland"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "cancellation"] <- "Attention of cancellation issues"
-ord.model.metrics.df$Label [ord.model.metrics.df$Term == "incorrect_item"] <- "Attention of incorrect items issues"
-ord.model.metrics.df # to check the results are as expected
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "(Intercept)"] <- 
+  "Baseline: Typical issues handled via phone in Eatland"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "chat_incorrect_item"] <- 
+  "Chat support for incorrect item issues"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "email"] <- 
+  "Support via email"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "chat"] <- 
+  "Support via chat"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "web_form"] <- 
+  "Support via web form"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "countryDrinkland"] <- 
+  "Support in Drinkland"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "cancellation"] <- 
+  "Support for cancellation issues"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "incorrect_item"] <- 
+  "Support for incorrect item issues"
+
+# Quick check to ensure labels are as expected
+ord.model.metrics.df
 
 ```
 
-
-Lastly, we can graphically represent the results to easily see which key factors in customer service are associated with more customers becoming detractors. We will especficically represent the predictions. 
-
+Lastly, we visually represent the predicted proportions of detractors to clearly identify which key customer service factors are associated with higher likelihoods of detractor status.
 
 ```{r}
 
@@ -1285,69 +1253,70 @@ ggplot(ord.model.metrics.df, aes(x = Prediction,
 
 ```
 
-In the graph we can see that contacting with customer service through methods other than telephone is associated with more detractors, especially when contacting via email, or via chat in the specific case of solving incorrect item issues. 
+The graph shows that contacting customer service through channels other than telephone is linked to a higher proportion of detractors—especially via email, or via chat when addressing incorrect item issues.
 
-Customer service in the country Drinkland is also associated with more detractors than in Eatland. 
+Additionally, customer service interactions in Drinkland correspond to more detractors compared to Eatland.
 
-Lastly, customers who contact for cancellation issues are expected to have more detractors than typical issues. 
+Finally, customers reaching out about cancellation issues also tend to have more detractors than those contacting for typical issues.
 
-However, it is important to consider that the impact of these situations might depend on how many customers contact us for each of them. We consider this in the next section. 
-
-
-### 2.3.4. Evaluating the Impact of Customer Service Factors
-
-To evaluate the impact in terms of additional detractors associated to each customer service factors, we will ponderate the predicted proportions in detractors by the number of cases associated to each factor. 
-
-We assume that we have the following percentage of cases for each of the above factors: 
-- Baseline: attention of typical issues via phone in Eatland: 10%
-- Attention via chat of incorrect item issues: 10%
-- Attention via email: 20%
-- Attention via chat: 40%
-- Attention via web form: 5%
-- Attention in the country Drinkland: 50%
-- Attention of cancellation issues: 5%
-- Attention of incorrect items issues: 30%
+It is important to note, however, that the overall impact of these factors depends on the volume of customers contacting us for each reason. We will account for this in the next section.
 
 
-We create impact variables by ponderating the predicted percentages of detractors and the differences in these percentages across factors: 
+## 4.4.Evaluating the Impact of Contextual Customer Service Factors
+
+To assess the impact in terms of additional detractors associated with each customer service factor, we weight the predicted proportions of detractors by the proportion of cases associated with each factor.
+
+We assume the following distribution of cases across the factors:
+
+- Baseline: Typical issues handled via phone in Eatland — 10%
+- Attention via chat for incorrect item issues — 10%
+- Attention via email — 20%
+- Attention via chat — 40%
+- Attention via web form — 5%
+- Attention in the country Drinkland — 50%
+- Attention for cancellation issues — 5%
+- Attention for incorrect item issues — 30%
+
+Using these proportions, we create impact variables by weighting both the predicted percentages of detractors and their differences across factors:
+
 
 ```{r}
+# Create a variable specifying the proportion of cases
+ord.model.metrics.df$prop.cases <- c(.10, .10, .20, .40, .05, .50, .05, .30)
 
-
-#Create a variable specifying the proportion of cases
-ord.model.metrics.df$prop.cases <- c(.10,.10, .20, .40, .05, .50, .05, .30)
-
-#Create the impact variables
-variables_to_mutate <- c( "Prediction",
-                          "Lower_Prediction",
-                          "Upper_Prediction", 
-                          "Predicted_Change",
-                          "Lower_Predicted_Change",
-                          "Upper_Predicted_Change"
+# Define variables to weight
+variables_to_mutate <- c(
+  "Prediction",
+  "Lower_Prediction",
+  "Upper_Prediction",
+  "Predicted_Change",
+  "Lower_Predicted_Change",
+  "Upper_Predicted_Change"
 )
 
-for(variable in variables_to_mutate){
+# Calculate weighted impact variables
+for(variable in variables_to_mutate) {
   new_col <- paste0("Impact_", variable)
-  ord.model.metrics.df[[new_col]] <-  ord.model.metrics.df[["prop.cases"]] * ord.model.metrics.df[[variable]]
+  ord.model.metrics.df[[new_col]] <- ord.model.metrics.df[["prop.cases"]] * ord.model.metrics.df[[variable]]
 }
 
-# Check the results
+# Review the updated dataframe
 ord.model.metrics.df
-
 ```
 
-We can graphically represent the results for the additional predictors associated to each customer service factor
- 
+
+To better understand the relative impact of each customer service factor on the increase in detractors, we visualize the additional predicted detractors associated with each factor.
+
+The following dot-and-whisker plot displays the estimated percentage increase in detractors, adjusted by the proportion of cases for each factor. Error bars represent the 95% confidence intervals.
 
 ```{r}
-
 # Create the dot-and-whisker plot for the additional detractors associated to each case.
-ggplot(ord.model.metrics.df [-1,], aes(x = Impact_Predicted_Change, 
+ggplot(ord.model.metrics.df[-1, ], aes(x = Impact_Predicted_Change, 
                     y = reorder(Label, Impact_Predicted_Change))) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
   geom_errorbarh(aes(xmin = Impact_Lower_Predicted_Change, xmax = Impact_Upper_Predicted_Change), height = 0.2) +
   geom_point(size = 3) +
-    geom_text(aes(label = paste(round(Impact_Predicted_Change, 1), "%")), 
+  geom_text(aes(label = paste0(round(Impact_Predicted_Change, 1), "%")), 
             vjust = -1.5, size = 3.5) + 
   labs(
     title = "Impact of Key Customer Service Factors",
@@ -1360,18 +1329,11 @@ ggplot(ord.model.metrics.df [-1,], aes(x = Impact_Predicted_Change,
 ```
 
 
+This graph allows us to visualize the absolute percentage of detractors expected under each key contextual customer service factor, compared to the baseline scenario (support via phone in Eatland for typical issues).
 
+For example, we can communicate to stakeholders that if we successfully address problems experienced by customers contacting via chat for incorrect item issues—bringing the detractor probability down to the baseline level—we could expect an approximate 3% reduction in overall detractors related to customer service.
 
-
-
-
-
-
-
-
-
-
-
+However, we do not yet know the specific issues customers encounter within each contextual factor. This will be explored in the next section.
 
 
 
