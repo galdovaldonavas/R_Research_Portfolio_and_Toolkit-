@@ -3,236 +3,317 @@ title: "Analysis of Satisfaction Survey"
 output: html_notebook
 ---
 
+#1. Introduction
 
-# 0. Setup
+This case study explores opportunities to improve customer service, with a focus on increasing the likelihood that customers recommend the company.
+
+The project was conducted in two phases:
+1. **Exploratory analysis** to identify key areas for improvement.
+2.  **Modeling the impact of customer complaints on recommendation likelihood**, using text analysis and simulation to evaluate how addressing pain points could improve customer service perceptions.
+
+While based on a real-world project, all data, variables, and insights presented here have been simulated to protect confidentiality.
+
+The analysis includes:
+- Data simulation and cleaning
+- Visualization techniques (e.g., heatmaps for high-dimensional data)
+- Descriptive statistics
+- Regression modeling (linear, logistic ordinal, and logistic binomial)
+- Simulation-based recommendations. 
+- Creation of reusable functions for automatizing procedures. 
+
+
+# 2. Setup
+
+We start by loading the required packages for data manipulation, visualization, modeling, and exporting results.
 
 ```{r}
-library(psych)
-library(ggplot2)
-library(readxl)#to see the database
-library(openxlsx)#to save the database in excel
-library(dplyr) # for data manipulation
-library(tidyr) # for transforming datasets to long and wide formats
-library(ordinal) # for ordinal logistic regression
-library(car) # for VIF calculations
-library(vcd) # for visualizing relations between factors
-library(VGAM)
-library(coefplot) # for plots about coefficients
+# Data handling
+library(readxl)      # Read Excel files
+library(openxlsx)    # Write Excel files
+library(dplyr)       # Data manipulation
+library(tidyr)       # Data reshaping (long/wide formats)
+
+# Visualization
+library(ggplot2)     # General plotting
+library(coefplot)    # Visualize model coefficients
+library(vcd)         # Visualizing categorical data
+
+# Statistical analysis
+library(psych)       # Descriptive statistics
+library(ordinal)     # Ordinal logistic regression
+library(VGAM)        # Alternative ordinal modeling
+library(car)         # VIF and regression diagnostics
 ```
 
 
-# 1. Data Simulation
+# 3. Data Simulation
 
-## 1.1. Simulation of demographic and contextual variables
-Variables <- c("gender", "age", "method", "country", "reason", "nps_score", "satisfaction", "complain.connect", "complain.respond.vel", "complain.solve.vel", "complain.repeat" )
+## 3.1. Simulating Demographic and Contextual Variables
+
+To create a realistic dataset, we simulate basic **demographic** information (e.g., age, gender) and **contextual variables** related to the customer service experience: country, contact method, and reason for contacting. 
 
 ```{r}
 
+# Set seed for reproducibility
 set.seed(1000)
 
-data.n <- 5*4*2*1000
+# Define dataset size 
+data.n <- 40000  # Large enough to allow subgroup analysis despite unbalanced category probabilities
 
-data <- data.frame (id = as.factor(c(1:data.n)))
+# Initialize dataframe with IDs
+data <- data.frame(id = factor(1:data.n))
+
+# Simulate age with a log-normal distribution, capped between 15 and 90
+data$age <- round(rlnorm(n = data.n, meanlog = log(40), sdlog = log(1.4)))
+data$age[data$age > 90] <- 90
+data$age[data$age < 15] <- 15
+
+# Simulate gender
+data$gender <- factor(sample(c("man", "woman"),
+                             prob = c(0.5, 0.5),
+                             replace = TRUE, size = data.n))
+
+# Simulate reason for contacting
+data$reason <- factor(sample(c("incorrect_item", "delay", "status", "cancellation", "other"),
+                             prob = c(0.20, 0.30, 0.20, 0.10, 0.20),
+                             replace = TRUE, size = data.n))
+
+# Simulate contact method
+data$method <- factor(sample(c("chat", "web_form", "email", "phone"),
+                             prob = c(0.40, 0.10, 0.15, 0.35),
+                             replace = TRUE, size = data.n))
+
+# Simulate country (two fictional countries for anonymity)
+data$country <- factor(sample(c("Drinkland", "Eatland"),
+                              prob = c(0.5, 0.5),
+                              replace = TRUE, size = data.n))
+
+```
 
 
-data$age <- round(rlnorm(n=data.n, meanlog= log(40), sdlog=log(1.4)))
-data$age [data$age>90] <- 90
-data$age [data$age<15] <- 15
+## 3.2. Simulation of Customer Complaints
 
-data$gender <- factor(sample(c("man", "woman"), prob= c(0.5, 0.5), replace= TRUE, size = data.n))
-data$country <- factor(sample(c("Drinkland","Eatland"), prob= c(0.5, 0.5), replace= TRUE, size = data.n))
-data$method <- factor(sample(c("chat", "web_form", "email", "phone"), prob= c(0.4, 0.10,0.15, 0.35), replace= TRUE, size = data.n))
-data$reason <- factor(sample(c("incorrect_item", "delay", "status","cancellation", "other"), prob= c(0.2, 0.3,0.2,0.1, 0.2), replace= TRUE, size = data.n))
+We simulate five types of customer complaints: connection issues, slow response, slow resolution, repetition of information, and other unspecified complaints. These are conditioned on demographic and contextual variables as follows:
+
+- **Connection issues**: more likely in Drinkland
+- **Slow response**: more frequent in email, and moderately in chat/web_form
+- **Slow resolution**: more frequent when "incorrect_item" is handled via chat
+- **Repetition**: more likely when the contact reason is "cancellation"
+- **Other complaints**: uniformly distributed
+
+```{r}
+
+## Complaints about connection issues
+# Base probability of a connection complaint: 10%
+prob_connection <- rep(0.10, data.n)
+# In Drinkland, probability is doubled
+prob_connection[data$country == "Drinkland"] <- prob_connection[data$country == "Drinkland"] * 2
+# Ensure probability values remain within [0, 1]
+prob_connection [prob_connection > 1] <- 1
+prob_connection [prob_connection < 0] <- 0
+# Generate binary variable based on probabilities
+data$complain.connect <- rbinom(n = data.n, size = 1, prob = prob_connection)
+# Check distribution across countries
+with(data, prop.table(table(complain.connect, country), margin = 2))
+
+
+## Complaints about slow response
+# Base probability of a slow response complaint: 5%
+prob_slow_response <- rep(0.05, data.n)
+# Email contacts: 6x higher likelihood
+prob_slow_response[data$method == "email"] <- prob_slow_response[data$method == "email"] * 6
+# Chat and web_form: 3x higher likelihood
+prob_slow_response[data$method %in% c("chat", "web_form")] <- prob_slow_response[data$method %in% c("chat", "web_form")] * 3
+# Ensure probability values remain within [0, 1]
+prob_slow_response [prob_slow_response > 1] <- 1
+prob_slow_response [prob_slow_response < 0] <- 0
+# Generate binary variable
+data$complain.sp.respond <- rbinom(n = data.n, size = 1, prob = prob_slow_response)
+# Check distribution across contact methods
+with(data, prop.table(table(complain.sp.respond, method), margin = 2))
+
+
+## Complaints about slow resolution
+# Base probability of a slow resolution complaint: 10%
+prob_slow_resolution <- rep(0.10, data.n)
+# If contact is via chat and reason is incorrect_item → 5x higher likelihood
+is_chat_incorrect <- data$method == "chat" & data$reason == "incorrect_item"
+prob_slow_resolution[is_chat_incorrect] <- prob_slow_resolution[is_chat_incorrect] * 5
+# Ensure probability values remain within [0, 1]
+prob_slow_resolution [prob_slow_resolution > 1] <- 1
+prob_slow_resolution [prob_slow_resolution < 0] <- 0
+# Generate binary variable
+data$complain.sp.solve <- rbinom(n = data.n, size = 1, prob = prob_slow_resolution)
+# Check distribution by reason and method
+with(data, prop.table(table(complain.sp.solve, reason, method), margin = c(2, 3)))
+
+
+## Complaints about having to repeat information
+# Base probability of a repetition complaint: 2%
+prob_repeat_info <- rep(0.02, data.n)
+# If contact reason is cancellation → 10x higher likelihood
+prob_repeat_info[data$reason == "cancellation"] <- prob_repeat_info[data$reason == "cancellation"] * 10
+# Ensure probability values remain within [0, 1]
+prob_repeat_info [prob_repeat_info > 1] <- 1
+prob_repeat_info [prob_repeat_info < 0] <- 0
+# Generate binary variable
+data$complain.repeat <- rbinom(n = data.n, size = 1, prob = prob_repeat_info)
+# Check distribution across contact reasons
+with(data, prop.table(table(complain.repeat, reason), margin = 2))
+
+
+## Other types of complaints (uniform distribution)
+# Constant probability of 20% for other unspecified complaints
+data$complain.other <- rbinom(n = data.n, size = 1, prob = 0.20)
+# Check distribution
+with(data, prop.table(table(complain.other)))
+
+```
+
+## 3.3. Simulation of NPS scores 
+
+We simulate NPS scores by first assuming a normally distributed base score in the ideal case where customers have no complaints.  
+
+Then, we apply fixed score penalties based on the presence of different types of complaints.  
+Finally, we constrain scores to the valid NPS range (0–10), convert them to integers, and add placeholders for open-text responses.
+
+```{r}
+## Simulation of NPS scores
+
+# Step 1: Simulate base NPS scores assuming no complaints (mean = 9, sd = 2)
+data$nps.score <- rnorm(data.n, mean = 9, sd = 2)
+
+# Step 2: Apply fixed penalties based on complaints
+# -3 for connection issues
+# -4 for slow response
+# -6 for slow resolution
+# -2 for repeated information
+# -1 for other complaints
+data$nps.score <- data$nps.score -
+  3 * data$complain.connect -
+  4 * data$complain.sp.respond -
+  6 * data$complain.sp.solve -
+  2 * data$complain.repeat -
+  1 * data$complain.other 
+
+# Step 3: Ensure scores stay within the 0–10 range
+data$nps.score[data$nps.score < 0] <- 0
+data$nps.score[data$nps.score > 10] <- 10 
+
+# Step 4: Convert to integer values (using floor)
+data$nps.score <- floor(data$nps.score)
+
+# Step 5: Add placeholder for open-text comments
 data$open.comment <- rep("bla bla", data.n)
 
-
-```
-
-## Simulation of frequency of complaints depending of the demographic and contextual factors
-
-We will simulate the presence of complaints about the connection (complain.connect), the speed to respond (complain.sp.respond), the speed to solve the problem (complain.sp.solve) and complains about repeating information (complain.repeat), attending to several factors: 
-
-- complaints about connection will be higher in the country Drinkland
-- complaints about speed to response will strongly higher in email, and moderately higher in chat and web forms. 
-- complaints about speed to solve will be higher in incorrect item deliveries attended through chat.
-- complaints about the need to repeat information will be higher in order cancellation. 
-- other complaints have similar distribution across countries, contact reasons and contact methods
-
-For each type of complaint we will set an initial probability, then we will alter that probability depending on the presence of the mentioned factors. 
-
-```{r}
-
-##For connection complaints
-# we set an initial probability of 0.1 of the complaints to appear
-con.prob <- rep(0.1,data.n) 
-# we set a double probability of connection complains in Drinkland
-con.prob [data$country=="Drinkland"] <- con.prob [data$country=="Drinkland"] *2 
-#We ensure the probabilities are contained between 0 and 1 (for prevention in further transformations)
-con.prob[con.prob>1] <- 1
-con.prob[con.prob<0] <- 0
-#we create the variable attending the above probabilities for each of our cases
-data$complain.connect<- rbinom(n=data.n, size =1, prob=con.prob)
-#to check the results are as expected: 
-with(data,prop.table(table(complain.connect,country), margin=2))
-
-
-##For complaints about the speed to respond
-# we set an initial probability of 0.05 of the complaints to appear
-spr.prob <- rep(0.05,data.n) 
-# we set a 6 times higher probability for complains to appear for email
-spr.prob [data$method=="email"] <- spr.prob [data$method=="email"] *6 
-#We set a 3 times higher probability for complaints to appear for chat and web forms
-spr.prob [data$method %in% c("chat", "web_form")] <- spr.prob [data$method %in% c("chat", "web_form")] *3
-#We ensure the probabilities are contained between 0 and 1 (for prevention in further transformations)
-spr.prob[spr.prob>1] <- 1
-spr.prob[spr.prob<0] <- 0
-#we create the variable attending the above probabilities for each of our cases
-data$complain.sp.respond<- rbinom(n=data.n, size =1, prob=spr.prob)
-#to check the results are as expected: 
-with(data,prop.table(table(complain.sp.respond,method),margin=2))
-
-
-##For complaints about the speed to solve
-# we set an initial probability of 0.1 of the complaints to appear
-sps.prob <- rep(0.1,data.n) 
-# we set a 5 times higher probability for contact reasons of incorrect items that are attended by chat
-sps.prob [data$method=="chat" & data$reason=="incorrect_item"] <- sps.prob [data$method=="chat" & data$reason=="incorrect_item"] *5
-#We ensure the probabilities are contained between 0 and 1 (for prevention in further transformations)
-sps.prob[sps.prob>1] <- 1
-sps.prob[sps.prob<0] <- 0
-#we create the variable attending the above probabilities for each of our cases
-data$complain.sp.solve<- rbinom(n=data.n, size =1, prob=sps.prob)
-#to check the results are as expected: 
-with(data,prop.table(table(complain.sp.solve,reason,method),margin=c(2:3)))
-
-##For complaints about the need to repeat information
-# we set an initial probability of 0.02 of the complaints to appear
-rp.prob <- rep(0.02,data.n) 
-# we set a 10 times higher probability for contact reasons about cancellations
-rp.prob [data$reason=="cancellation"] <- rp.prob [data$reason=="cancellation"] *10
-#We ensure the probabilities are contained between 0 and 1 (for prevention in further transformations)
-rp.prob[rp.prob>1] <- 1
-rp.prob[rp.prob<0] <- 0
-#we create the variable attending the above probabilities for each of our cases
-data$complain.repeat<- rbinom(n=data.n, size =1, prob=rp.prob)
-#to check the results are as expected: 
-with(data,prop.table(table(complain.repeat,reason),margin=2))
-
-##For other complaints
-
-data$complain.other<- rbinom(n=data.n, size =1, prob=.2)
-#to check the results are as expected: 
-with(data,prop.table(table(complain.other)))
+# Step 6: Visualize score distribution
+barplot(table(data$nps.score))
+with(data, prop.table(table(data$nps.score)))
 
 ```
 
 
+### 3.3.1. Specifying the NPS segments based on NPS scores
 
+Based on standard NPS segmentation, we classify customers into three categories:
+- **Detractors**: scores from 0 to 6
+- **Passives**: scores of 7 or 8
+- **Promoters**: scores of 9 or 10
 
-
-##Simulation of NPS scores 
-
-We first assume a normal distribution of responses in the ideal case in which customers have no complaints.  
-Then we apply the corrections based on the information we have simulated about the presence of different complaints. 
-
-At the end, we limit the scores to 0 and 10 and transform them to integers, in line with restrictions of NPS scores. 
-
-```{r}
-
-#Preliminary distribution in case of no complaints. We use a high mean value
-data$nps.score <- rnorm(data.n, mean=9, sd= 2)
-
-
-#We adjust the scores for the presence of complaints. We are applying fixed penalties to NPS scores based on the presence of complaints (e.g., 3 points if there are connection complaints).While using a binomial distribution could add randomness (and realism), we opt for fixed values to make the relationships easier to interpret. 
-data$nps.score <- data$nps.score -
-3 * data$complain.connect -
-4 * data$complain.sp.respond -
-6 * data$complain.sp.solve -
-2 * data$complain.repeat -
-1 * data$complain.other 
-
-# to limit the values between 0 and 10:
-data$nps.score[data$nps.score<0] <- 0
-data$nps.score[data$nps.score>10] <- 10 
-
-# to convert to integer values
-data$nps.score <- floor (data$nps.score)
-
-
-#to see the distribution of scores
-
-barplot(table(data$nps.score)) 
-
-with(data,(prop.table(table(data$nps.score))))
-
-
-```
-
-
-### Specifying the NPS segments based on NPS scores
+We create a new categorical variable to reflect these groupings.
 
 ```{r}
+## Create NPS segments based on score values
+
+# Step 1: Initialize empty character variable
 data$nps.segment <- rep(NA_character_, data.n)
 
-data$nps.segment [data$nps.score<=6] <- "detractor"
-data$nps.segment [data$nps.score >6 & data$nps.score <9] <- "passive"
-data$nps.segment [data$nps.score>=9] <- "promoter"
+# Step 2: Assign segment based on score range
+data$nps.segment[data$nps.score <= 6] <- "detractor"
+data$nps.segment[data$nps.score > 6 & data$nps.score < 9] <- "passive"
+data$nps.segment[data$nps.score >= 9] <- "promoter"
 
-data$nps.segment <- factor (data$nps.segment)
+# Step 3: Convert to factor for categorical analysis
+data$nps.segment <- factor(data$nps.segment, levels = c("detractor", "passive", "promoter"))
 
-#to check the results
+# Step 4: Check distribution across NPS segments
 with(data, prop.table(table(nps.segment)))
+
 ```
 
-##Simulation of satisfaction scores
 
+## 3.4. Simulation of satisfaction scores
+
+In addition to our main dependent variable (NPS), we simulate satisfaction scores, which were available for some customer service categories in the original project.
+
+These scores will be useful to explore the **convergent validity** of NPS, as they are expected to be positively correlated.
 
 ```{r}
+## Simulation of satisfaction scores (1 to 5 scale)
 
-data$satisfaction <- floor(rnorm(data.n, mean = 3, sd=0.5) + 0.9 * (1 + as.numeric(scale(data$nps.score))))
+# Step 1: Generate satisfaction scores based on NPS
+# We use a normal distribution centered at 3, with some variability (sd = 0.5)
+# and add a scaled component based on NPS to simulate a positive relationship.
+data$satisfaction <- floor(
+  rnorm(data.n, mean = 3, sd = 0.5) + 
+  0.9 * (1 + as.numeric(scale(data$nps.score)))
+)
 
-data$satisfaction[data$satisfaction<1] <- 1
-data$satisfaction[data$satisfaction>5] <- 5
+# Step 2: Ensure scores stay within the 1–5 range
+data$satisfaction[data$satisfaction < 1] <- 1
+data$satisfaction[data$satisfaction > 5] <- 5
 
-# To see the distribution
+# Step 3: Visualize the distribution
 barplot(table(data$satisfaction))
-with(data,prop.table(table(satisfaction)))
+with(data, prop.table(table(satisfaction)))
 
-
-# To check the correlation with NPS
-with(data, cor(nps.score,satisfaction, method="spearman"))
+# Step 4: Check correlation with NPS scores (Spearman method)
+with(data, cor(nps.score, satisfaction, method = "spearman"))
 
 
 ```
 
-##Simulation of missing data
 
-###Missing data for satisfaction
+### 3.4.1. Simulating missing data for satisfaction
 
-We simulate that satisfaction was not available for the country Drinkland, and for the contact methods of email and webform. 
-Additionally, within those situations in which the satisfaction item was available, there is 10% probability that customers do not answer to it.
+To reflect the restrictions observed in the original project, we simulate that satisfaction data is **not available** in the following conditions:
+
+- For customers from **Drinkland**
+- For contacts via **email** or **web form**
+
+In addition, we assume that even when satisfaction was supposed to be collected, there is a **10% probability of missingness**, simulating cases where customers simply skipped the question.
+
+This missing data was a key consideration in the original project and contributed to the decision to focus on likelihood to recommend (Net Promoter Score) rather than satisfaction, as the latter was not consistently available across segments.
 
 ```{r}
+## Simulate missing data for satisfaction
 
-data$satisfaction[data$country=="Drinkland"]<- NA_real_
-data$satisfaction[data$method %in% c("email","web_form")]<- NA_real_
+# Step 1: Set satisfaction to missing for Drinkland
+data$satisfaction[data$country == "Drinkland"] <- NA_real_
 
+# Step 2: Set satisfaction to missing for email and web_form contacts
+data$satisfaction[data$method %in% c("email", "web_form")] <- NA_real_
 
-na_randomizer <- sample(c(0,1), size=sum(!is.na(data$satisfaction)), replace=TRUE, prob= c(0.1,0.9))
-data$satisfaction[which(!is.na(data$satisfaction))[ na_randomizer==0]]<- NA_real_
+# Step 3: Introduce 10% additional random missingness among remaining valid values
+# Create a random vector (0 = missing, 1 = keep) for non-NA entries
+na_randomizer <- sample(
+  c(0, 1),
+  size = sum(!is.na(data$satisfaction)),
+  replace = TRUE,
+  prob = c(0.1, 0.9)
+)
+# Apply missing values where randomizer is 0
+data$satisfaction[which(!is.na(data$satisfaction))[na_randomizer == 0]] <- NA_real_
 
-#We see the results
-summary(data$satisfaction)
+# Step 4: Check final distribution of satisfaction (including NAs)
+with(data, prop.table(table(is.na(satisfaction), method, country), margin = 2:3))
+
 
 ```
 
+# 4. Exploratory analysis to identify key areas for improvement
 
-
-
-
-# 2. Exploration of Satisfaction and Probability to Recommend  across Methods, Reasons, and Countries
-
-## 2.1. Measurement considerations
+## 4.1. Measurement considerations
 Our main goal was to understand customer satisfaction. But, we didn't have satisfaction data readily available for all countries and contact methods. Given this limitation, and because our key stakeholders were already familiar with it, we decided to use the Net Promoter Score (NPS) as our primary indicator.
 
 NPS measures customer loyalty and how likely they are to recommend our services. It gave us a consistent way to evaluate customer perception across all the different areas we were interested in. For this analysis, NPS acted as a good proxy for overall customer experience and satisfaction.
