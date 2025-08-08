@@ -1,5 +1,5 @@
 ---
-title: "Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression"
+title: "Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic Regression"
 output: html_notebook
 ---
 
@@ -1338,5 +1338,6 @@ This graph allows us to visualize the absolute percentage of detractors expected
 For example, we can communicate to stakeholders that if we successfully address problems experienced by customers contacting via chat for incorrect item issues—bringing the detractor probability down to the baseline level—we could expect an approximate 3% reduction in overall detractors related to customer service.
 
 However, we do not yet know the specific issues customers encounter within each contextual factor. This will be explored in the next study case: **"Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities via Text Analysis"**
+
 
 
