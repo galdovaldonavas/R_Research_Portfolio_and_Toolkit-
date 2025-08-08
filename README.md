@@ -8,7 +8,7 @@ I'm currently in the process of adding more projects, but feel free to explore t
 
 ## Projects
 
-### Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression
+### Predicting Customer Detractors (Part 1): Analyzing Contextual Factors Via Logistic Regression
 * **Problem:** This case study aims to identify key factors that influence customer's likelihood to recommend the company after interacting with customer service. 
 * **Methodology:** The project utilizes a comprehensive analytical approach, including:
   * **Data Simulation & Cleaning:** Creating and preparing the dataset for analysis.
