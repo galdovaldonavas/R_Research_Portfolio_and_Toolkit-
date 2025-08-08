@@ -1,0 +1,76 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+### Selection of the sample for the analyses of complaints
+
+Although we initially simulated complaints for all subjects in the dataset, we didn't have this data available for all our cases. This data came from further coding for subgroups we wanted to do follow-up analyses (see Section X). Based on this, we're now selecting a stratified sample of 100 cases for each of the available contact methods, for each of the four contact reasons of interest ("incorrect_item", "delay", "status", "cancellation"), and for each of the two relevant countries. This ensures a balanced representation across key dimensions for our specialized analyses.
+
+Specifically, for each method, reason, and country combination, we aim to obtain a sample of 100 subjects and store the results in a new dataset.
+
+```{r}
+# Función para obtener las métricas de impacto de un modelo binomial
+
+f.metrics.binomial <- function(my.model){
+  
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("La función requiere un objeto de modelo glm con familia 'binomial'.")
+  }
+  
+  # 1. Crear un dataframe con los escenarios a comparar
+  #    Necesitas definir todas tus variables dummy y de interacción
+  escenarios <- data.frame(
+    Term = names(coef(my.model)),
+    web_form = c(0, 1, 0, 0, 0, 0, 0),
+    chat = c(0, 0, 1, 0, 0, 0, 0),
+    email = c(0, 0, 0, 1, 0, 0, 0),
+    cancellation = c(0, 0, 0, 0, 1, 0, 0),
+    incorrect_item = c(0, 0, 0, 0, 0, 1, 0),
+    countryDrinkland = c(0, 0, 0, 0, 0, 0, 1)
+  )
+  
+  # Eliminar la fila del intercepto del dataframe
+  escenarios <- escenarios[-1, ]
+  
+  # 2. Predecir las probabilidades para cada escenario
+  #    'type = "response"' devuelve la probabilidad directamente
+  probabilidades_predichas <- predict(my.model, newdata = escenarios, type = "response")
+  
+  # 3. Calcular la probabilidad base
+  #    Esto se hace prediciendo para el escenario de referencia (todo en 0)
+  prob_base <- predict(my.model, newdata = data.frame(web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, countryDrinkland = 0), type = "response")
+  
+  # 4. Calcular la diferencia absoluta en puntos porcentuales
+  diferencia_absoluta_pp <- (probabilidades_predichas - prob_base) * 100
+  
+  # 5. Crear el dataframe final
+  results <- data.frame(
+    Term = escenarios$Term,
+    Probabilidad_Base_pct = prob_base * 100,
+    Nueva_Probabilidad_pct = probabilidades_predichas * 100,
+    Diferencia_Absoluta_pp = diferencia_absoluta_pp
+  )
+  
+  # 6. Ordenar los resultados
+  results <- dplyr::arrange(results, desc(Diferencia_Absoluta_pp))
+  
+  return(results)
+}
+
+diff.prop.df <- f.metrics.binomial(binomial.model.c)
+diff.prop.df
+
+```
+
+
+correlación y scatterplot
+código para la matriz de NPS
+con algún análisis acompañando: ver si uso modelo lineal o logarítmico
+
+
+
+
+
+
