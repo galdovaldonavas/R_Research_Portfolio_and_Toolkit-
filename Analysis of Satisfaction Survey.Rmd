@@ -1,25 +1,29 @@
 ---
-title: "Analysis of Satisfaction Survey"
+title: "Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression"
 output: html_notebook
 ---
 
 #1. Introduction
 
-This case study explores opportunities to improve customer service, with a focus on increasing the likelihood that customers recommend the company.
+This case study explores opportunities to improve customer service, focusing on increasing the likelihood that customers recommend the company.
 
 The project was conducted in two phases:
-1. **Exploratory analysis** to identify key areas for improvement.
-2.  **Modeling the impact of customer complaints on recommendation likelihood**, using text analysis and simulation to evaluate how addressing pain points could improve customer service perceptions.
 
-While based on a real-world project, all data, variables, and insights presented here have been simulated to protect confidentiality.
+1. **Exploratory analysis** to identify areas needing improvement, based on internal data analysis and logistic regression modeling. This is the phase represented in this document. 
+
+2. **Identifying potential improvements and modeling their impact**, using text analysis and simulation to evaluate how addressing pain points could enhance customer perceptions. Due to length constraints, this second part is presented in a separate document: "Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities via Text Analysis."
+
+Although based on a real-world project, all data, variables, and insights presented here have been simulated to maintain confidentiality.
 
 The analysis includes:
+
 - Data simulation and cleaning
 - Visualization techniques (e.g., heatmaps for high-dimensional data)
 - Descriptive statistics
-- Regression modeling (linear, logistic ordinal, and logistic binomial)
-- Simulation-based recommendations. 
-- Creation of reusable functions for automatizing procedures. 
+- Regression modeling evaluations (linear, ordinal logistic, and binomial logistic)
+- Simulation-based recommendations
+- Creation of reusable functions to automate procedures
+
 
 
 # 2. Setup
@@ -1333,105 +1337,6 @@ This graph allows us to visualize the absolute percentage of detractors expected
 
 For example, we can communicate to stakeholders that if we successfully address problems experienced by customers contacting via chat for incorrect item issues—bringing the detractor probability down to the baseline level—we could expect an approximate 3% reduction in overall detractors related to customer service.
 
-However, we do not yet know the specific issues customers encounter within each contextual factor. This will be explored in the next section.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### Selection of the sample for the analyses of complaints
-
-Although we initially simulated complaints for all subjects in the dataset, we didn't have this data available for all our cases. This data came from further coding for subgroups we wanted to do follow-up analyses (see Section X). Based on this, we're now selecting a stratified sample of 100 cases for each of the available contact methods, for each of the four contact reasons of interest ("incorrect_item", "delay", "status", "cancellation"), and for each of the two relevant countries. This ensures a balanced representation across key dimensions for our specialized analyses.
-
-Specifically, for each method, reason, and country combination, we aim to obtain a sample of 100 subjects and store the results in a new dataset.
-
-```{r}
-# Función para obtener las métricas de impacto de un modelo binomial
-
-f.metrics.binomial <- function(my.model){
-  
-  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
-    stop("La función requiere un objeto de modelo glm con familia 'binomial'.")
-  }
-  
-  # 1. Crear un dataframe con los escenarios a comparar
-  #    Necesitas definir todas tus variables dummy y de interacción
-  escenarios <- data.frame(
-    Term = names(coef(my.model)),
-    web_form = c(0, 1, 0, 0, 0, 0, 0),
-    chat = c(0, 0, 1, 0, 0, 0, 0),
-    email = c(0, 0, 0, 1, 0, 0, 0),
-    cancellation = c(0, 0, 0, 0, 1, 0, 0),
-    incorrect_item = c(0, 0, 0, 0, 0, 1, 0),
-    countryDrinkland = c(0, 0, 0, 0, 0, 0, 1)
-  )
-  
-  # Eliminar la fila del intercepto del dataframe
-  escenarios <- escenarios[-1, ]
-  
-  # 2. Predecir las probabilidades para cada escenario
-  #    'type = "response"' devuelve la probabilidad directamente
-  probabilidades_predichas <- predict(my.model, newdata = escenarios, type = "response")
-  
-  # 3. Calcular la probabilidad base
-  #    Esto se hace prediciendo para el escenario de referencia (todo en 0)
-  prob_base <- predict(my.model, newdata = data.frame(web_form = 0, chat = 0, email = 0, cancellation = 0, incorrect_item = 0, countryDrinkland = 0), type = "response")
-  
-  # 4. Calcular la diferencia absoluta en puntos porcentuales
-  diferencia_absoluta_pp <- (probabilidades_predichas - prob_base) * 100
-  
-  # 5. Crear el dataframe final
-  results <- data.frame(
-    Term = escenarios$Term,
-    Probabilidad_Base_pct = prob_base * 100,
-    Nueva_Probabilidad_pct = probabilidades_predichas * 100,
-    Diferencia_Absoluta_pp = diferencia_absoluta_pp
-  )
-  
-  # 6. Ordenar los resultados
-  results <- dplyr::arrange(results, desc(Diferencia_Absoluta_pp))
-  
-  return(results)
-}
-
-diff.prop.df <- f.metrics.binomial(binomial.model.c)
-diff.prop.df
-
-```
-
-
-correlación y scatterplot
-código para la matriz de NPS
-con algún análisis acompañando: ver si uso modelo lineal o logarítmico
-
-
-
-
+However, we do not yet know the specific issues customers encounter within each contextual factor. This will be explored in the next study case: **"Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities via Text Analysis"**
 
 
