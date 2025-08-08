@@ -2,7 +2,7 @@
 title: "Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic Regression"
 output: html_notebook
 ---
-ver
+  
 #1. Introduction
 
 This case study explores opportunities to improve customer service, focusing on increasing the likelihood that customers recommend the company.
