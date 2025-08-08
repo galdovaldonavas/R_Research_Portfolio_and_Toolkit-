@@ -4,6 +4,7 @@ title: Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via
 output:
   html_document:
     df_print: paged
+    self_contained: false 
 ---
 
 
