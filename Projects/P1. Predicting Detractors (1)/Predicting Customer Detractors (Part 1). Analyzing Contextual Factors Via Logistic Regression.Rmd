@@ -1,9 +1,13 @@
 ---
-title: "Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic Regression"
-output: html_notebook
+title: Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic
+  Regression
+output:
+  html_document:
+    df_print: paged
 ---
-    v
-#1. Introduction
+
+
+# 1. Introduction
 
 This case study explores opportunities to improve customer service, focusing on increasing the likelihood that customers recommend the company.
 
@@ -315,9 +319,9 @@ with(data, prop.table(table(is.na(satisfaction), method, country), margin = 2:3)
 
 ```
 
-#4. Exploratory Analysis to Identify Key Areas for Improvement
+# 4. Exploratory Analysis to Identify Key Areas for Improvement
 
-#4.1. Measurement Considerations: Convergent Validity of NPS Scores
+# 4.1. Measurement Considerations: Convergent Validity of NPS Scores
 
 The validity of our main dependent variable, the Net Promoter Score (NPS), has been subject to criticism. Some of these critiques highlight that NPS relies on a single item, which may not fully capture the complexity of the likelihood to recommend. Additionally, the standard NPS formulation specifically asks about recommending the brand to friends or colleagues, which may not generalize to all recommendation scenarios.
 
@@ -378,7 +382,7 @@ ggplot(na.omit(data[, c("nps.score", "satisfaction")]),
 The scatterplot reveals a strong, monotonic—and approximately linear—relationship between NPS score and satisfaction.
 
 
-## 4.1.2. Spearman Correlation between NPS and Satisfaction Scores
+### 4.1.2. Spearman Correlation between NPS and Satisfaction Scores
 
 Given that both variables are ordinal in nature and not normally distributed, we use Spearman’s rank correlation. This method evaluates the strength and direction of a monotonic association, without assuming interval-level measurement or normality.
 
@@ -392,7 +396,7 @@ The results indicate a strong positive Spearman correlation between satisfaction
 This supports the convergent validity of NPS in our dataset and suggests it is a meaningful proxy for overall customer satisfaction.
 
 
-## 4.1.3. Further Measurement Considerations
+### 4.1.3. Further Measurement Considerations
 
 Despite the evidence supporting the convergent validity of the **raw NPS scores**, there remain concerns about the use of the **categorical NPS metric**, which is calculated by subtracting the percentage of detractors (scores 0–6) from the percentage of promoters (scores 9–10).
 
@@ -547,7 +551,7 @@ f.heatmap.3f <- function(my.data, my.dv, factor.columns, factor.rows, factor.blo
 ```
 
 
-### 4.2.2.Heatmap for NPS in Categorical Scores
+### 4.2.2. Heatmap for NPS in Categorical Scores
 
 We first created a heatmap using NPS in its categorical form, as this is the format most familiar to stakeholders. This choice facilitates collaboration and interpretation, enabling domain experts to visually identify potential patterns and effects across key service factors.
 
@@ -730,7 +734,7 @@ All three measures show strong correlations (r > 0.90), providing additional con
 While the heatmaps provided valuable visual insights into areas where customer service performance appears to be lower, statistical modeling is necessary to formally quantify these relationships.
 
 
-###4.3.1.  Setting Reference Levels for Factor Categories
+### 4.3.1.  Setting Reference Levels for Factor Categories
 
 To make the interpretation of model coefficients more intuitive, we set the reference levels of our categorical predictors based on the heatmap results. Specifically, we use the levels associated with higher NPS scores as the reference. This allows us to interpret model outputs as comparisons against the best-performing category for each factor.
 
@@ -743,7 +747,7 @@ data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
 ```
 
 
-### 4.3.1. Discarding a Linear Regression Model. 
+### 4.3.2. Discarding a Linear Regression Model. 
 
 We discard the linear model because our outcome variable, NPS score, is ordinal in nature, and it is difficult to assume equal distances between adjacent scores given the ceiling and floor effects observed in its distribution (see Section 4.1.1).
 
@@ -767,14 +771,14 @@ plot(linear.model.sq)
 As shown in the Q-Q plots, the distribution of residuals deviates substantially from the theoretical normal distribution.
 
 
-### 4.3.2. Evaluating the Appropriateness of an Ordinal Model
+### 4.3.3. Evaluating the Appropriateness of an Ordinal Model
 
 We prioritize testing an ordinal logistic model over a binomial logistic model, as it allows us to estimate the effects of our predictors across the full NPS scale, rather than focusing on a single outcome category (e.g., detractors).
 
 However, before proceeding, we need to check whether key assumptions of this model are met—particularly the absence of multicollinearity and the proportional odds assumption across the levels of our dependent variable.
 
 
-### 4.3.2.1. Checking the Collinearity Assumption
+#### 4.3.3.1. Checking the Collinearity Assumption
 
 We assess potential collinearity among our categorical predictors using both visualizations and statistical diagnostics.
 
@@ -792,7 +796,7 @@ The VIF analysis shows no indication of multicollinearity among the predictors. 
 This statistical result is further supported by the mosaic plot, which shows no strong associations between the levels of the factors. The distribution of frequencies appears relatively uniform across these levels.
 
 
-##### 4.3.2.2. Checking the Proportional Odds Assumption
+##### 4.3.3.2. Checking the Proportional Odds Assumption
 
 Before testing the proportional odds assumption, we create dummy variables for the factors with multiple categories. This allows us to assess the assumption separately for each category.
 
@@ -836,7 +840,7 @@ The results suggest that the proportional odds assumption is violated for most o
 We will inspect several ways to solve this issue.  
 
 
-###### 4.3.2.2.1 Addressing Non-Proportional Odds by Incorporating an Interaction Term
+###### 4.3.3.2.1 Addressing Non-Proportional Odds by Incorporating an Interaction Term
 
 To address the observed violation of the proportional odds assumption, we explore the inclusion of a theoretically meaningful interaction in the model.
 
@@ -882,7 +886,7 @@ After including the interaction, the proportional odds assumption is now satisfi
 To address this, we will explore a model that allows coefficients to vary across thresholds for predictors that violate the assumption.
 
 
-###### 4.3.2.2.2 Addressing Non-Proportional Odds by Modeling Varying Coefficients
+###### 4.3.3.2.2 Addressing Non-Proportional Odds by Modeling Varying Coefficients
 
 We fit a model that relaxes the proportional odds assumption for selected predictors, allowing their effects to differ at each NPS score interval, using the VGAM package.
 
@@ -938,7 +942,7 @@ This model still did not fit adequately, suggesting that our data may not confor
 Given this, we explore whether grouping categories of the NPS scale and focusing on predicting one specific group might help resolve this issue.
 
 
-###### 4.3.2.2.3.  Identifying Sections in the NPS Scale with Common Non-Proportional Odds
+###### 4.3.3.2.3.  Identifying Sections in the NPS Scale with Common Non-Proportional Odds
 
 To better understand how non-proportional odds manifest across the NPS scale, we visualize jitter and boxplots using the ggplot2 package:
 
@@ -973,7 +977,7 @@ The plots show that factors violating the proportional odds assumption have stro
 To address the non-proportional odds issue and focus on the NPS scale segment where these factors have the greatest impact, we will next explore a binomial logistic model predicting the presence of detractors (those whose NPS scores are 6 or below). 
  
 
-### 4.3.3. Binomial Logistic Regression Model to Predict Detractors
+### 4.3.4. Binomial Logistic Regression Model to Predict Detractors
 
 Given the limitations of the ordinal model due to violated proportional odds assumptions, we consider a binomial logistic regression model more appropriate for predicting detractors. This approach is also more parsimonious and efficient, focusing specifically on the group of NPS scores most affected by our factors.
 
@@ -1017,7 +1021,7 @@ The likelihood ratio test confirms that removing the status variable does not si
 We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of detractors is associated with specific customer service factors.
 
 
-#### 4.3.3.1. Creating Metrics to Interpret the Model
+#### 4.3.4.1. Creating Metrics to Interpret the Model
 
 To interpret the results of our binomial logistic regression, we will compute several complementary metrics for each of the factors:
 
@@ -1266,7 +1270,7 @@ Finally, customers reaching out about cancellation issues also tend to have more
 It is important to note, however, that the overall impact of these factors depends on the volume of customers contacting us for each reason. We will account for this in the next section.
 
 
-## 4.4.Evaluating the Impact of Contextual Customer Service Factors
+## 4.4. Evaluating the Impact of Contextual Customer Service Factors
 
 To assess the impact in terms of additional detractors associated with each customer service factor, we weight the predicted proportions of detractors by the proportion of cases associated with each factor.
 
