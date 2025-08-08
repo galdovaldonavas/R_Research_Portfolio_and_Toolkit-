@@ -1,5 +1,5 @@
 ---
-title: "Analysis of Satisfaction Survey"
+title: "Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression"
 output: html_notebook
 ---
 
