@@ -1,0 +1,364 @@
+---
+title: "Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities via Text Analysis"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+    self_contained: false
+---
+
+
+# 1. Introduction
+
+This case study explores opportunities to improve customer service, focusing on increasing the likelihood that customers recommend the company.
+
+Specifically, the project presented here is a continuation of a prior exploratory phase: [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
+
+In the present phase depicted in this document, we will focus on **identifying potential improvements and modeling their impact**, using text analysis to evaluate how addressing pain points could enhance customer perceptions.
+
+Although based on a real-world project, all data, variables, and insights presented here have been simulated to maintain confidentiality.
+
+The analysis includes:
+
+- Data simulation and cleaning
+- Visualization techniques
+- Descriptive statistics
+- Statistical tests
+- Multiple regression modeling
+- Simulation-based recommendations
+- Creation of reusable functions to automate procedures
+
+
+# 2. Setup
+
+We start by loading the required packages for data manipulation, visualization, modeling, and exporting results.
+
+```{r}
+# Data handling
+library(dplyr)       # Data manipulation
+
+# Visualization
+library(ggplot2)     # General plotting
+
+# Statistical analysis
+library(psych)       # Descriptive statistics
+library(car)         # VIF and regression diagnostics
+```
+
+
+
+# 3. Data Simulation
+
+The data simulation will be similar to [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), but with a random selection of comments to analyze within the contextual factors that we decided to follow up: 
+
+## 3.1. Activating the Data from the Prior Section of the Project
+
+The code below will reproduce the original data from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(1000)
+
+# Define dataset size 
+data.n <- 40000  # Large enough to allow subgroup analysis despite unbalanced category probabilities
+
+# Initialize dataframe with IDs
+data <- data.frame(id = factor(1:data.n))
+
+
+# ------ 1. Demographic Information and Contextual Variables
+
+# Simulate age with a log-normal distribution, capped between 15 and 90
+data$age <- round(rlnorm(n = data.n, meanlog = log(40), sdlog = log(1.4)))
+data$age[data$age > 90] <- 90
+data$age[data$age < 15] <- 15
+
+# Simulate gender
+data$gender <- factor(sample(c("man", "woman"),
+                             prob = c(0.5, 0.5),
+                             replace = TRUE, size = data.n))
+
+# Simulate reason for contacting
+data$reason <- factor(sample(c("incorrect_item", "delay", "status", "cancellation", "other"),
+                             prob = c(0.20, 0.30, 0.20, 0.10, 0.20),
+                             replace = TRUE, size = data.n))
+
+# Simulate contact method
+data$method <- factor(sample(c("chat", "web_form", "email", "phone"),
+                             prob = c(0.40, 0.10, 0.15, 0.35),
+                             replace = TRUE, size = data.n))
+
+# Simulate country (two fictional countries for anonymity)
+data$country <- factor(sample(c("Drinkland", "Eatland"),
+                              prob = c(0.5, 0.5),
+                              replace = TRUE, size = data.n))
+
+
+
+# ------ 3. Customer Complaints
+
+## Complaints about connection issues
+# Base probability of a connection complaint: 10%
+prob_connection <- rep(0.10, data.n)
+# In Drinkland, probability is doubled
+prob_connection[data$country == "Drinkland"] <- prob_connection[data$country == "Drinkland"] * 2
+# Ensure probability values remain within [0, 1]
+prob_connection [prob_connection > 1] <- 1
+prob_connection [prob_connection < 0] <- 0
+# Generate binary variable based on probabilities
+data$complain.connect <- rbinom(n = data.n, size = 1, prob = prob_connection)
+# Check distribution across countries
+with(data, prop.table(table(complain.connect, country), margin = 2))
+
+
+## Complaints about slow response
+# Base probability of a slow response complaint: 5%
+prob_slow_response <- rep(0.05, data.n)
+# Email contacts: 6x higher likelihood
+prob_slow_response[data$method == "email"] <- prob_slow_response[data$method == "email"] * 6
+# Chat and web_form: 3x higher likelihood
+prob_slow_response[data$method %in% c("chat", "web_form")] <- prob_slow_response[data$method %in% c("chat", "web_form")] * 3
+# Ensure probability values remain within [0, 1]
+prob_slow_response [prob_slow_response > 1] <- 1
+prob_slow_response [prob_slow_response < 0] <- 0
+# Generate binary variable
+data$complain.sp.respond <- rbinom(n = data.n, size = 1, prob = prob_slow_response)
+# Check distribution across contact methods
+with(data, prop.table(table(complain.sp.respond, method), margin = 2))
+
+
+## Complaints about slow resolution
+# Base probability of a slow resolution complaint: 10%
+prob_slow_resolution <- rep(0.10, data.n)
+# If contact is via chat and reason is incorrect_item → 5x higher likelihood
+is_chat_incorrect <- data$method == "chat" & data$reason == "incorrect_item"
+prob_slow_resolution[is_chat_incorrect] <- prob_slow_resolution[is_chat_incorrect] * 5
+# Ensure probability values remain within [0, 1]
+prob_slow_resolution [prob_slow_resolution > 1] <- 1
+prob_slow_resolution [prob_slow_resolution < 0] <- 0
+# Generate binary variable
+data$complain.sp.solve <- rbinom(n = data.n, size = 1, prob = prob_slow_resolution)
+# Check distribution by reason and method
+with(data, prop.table(table(complain.sp.solve, reason, method), margin = c(2, 3)))
+
+
+## Complaints about having to repeat information
+# Base probability of a repetition complaint: 2%
+prob_repeat_info <- rep(0.02, data.n)
+# If contact reason is cancellation → 10x higher likelihood
+prob_repeat_info[data$reason == "cancellation"] <- prob_repeat_info[data$reason == "cancellation"] * 10
+# Ensure probability values remain within [0, 1]
+prob_repeat_info [prob_repeat_info > 1] <- 1
+prob_repeat_info [prob_repeat_info < 0] <- 0
+# Generate binary variable
+data$complain.repeat <- rbinom(n = data.n, size = 1, prob = prob_repeat_info)
+# Check distribution across contact reasons
+with(data, prop.table(table(complain.repeat, reason), margin = 2))
+
+
+## Other types of complaints (uniform distribution)
+# Constant probability of 20% for other unspecified complaints
+data$complain.other <- rbinom(n = data.n, size = 1, prob = 0.20)
+# Check distribution
+with(data, prop.table(table(complain.other)))
+
+
+# ------ 3. NPS scores
+
+# Simulate base NPS scores assuming no complaints (mean = 9, sd = 2)
+data$nps.score <- rnorm(data.n, mean = 9, sd = 2)
+
+# Apply fixed penalties based on complaints
+# -3 for connection issues
+# -4 for slow response
+# -6 for slow resolution
+# -2 for repeated information
+# -1 for other complaints
+data$nps.score <- data$nps.score -
+  3 * data$complain.connect -
+  4 * data$complain.sp.respond -
+  6 * data$complain.sp.solve -
+  2 * data$complain.repeat -
+  1 * data$complain.other 
+
+# Ensure scores stay within the 0–10 range
+data$nps.score[data$nps.score < 0] <- 0
+data$nps.score[data$nps.score > 10] <- 10 
+
+# Convert to integer values (using floor)
+data$nps.score <- floor(data$nps.score)
+
+# Add placeholder for open-text comments
+data$open.comment <- rep("bla bla", data.n)
+
+# Visualize score distribution
+barplot(table(data$nps.score))
+with(data, prop.table(table(data$nps.score)))
+
+## Create NPS segments based on score values
+
+data$nps.segment <- rep(NA_character_, data.n) # Initialize empty character variable
+
+data$nps.segment[data$nps.score <= 6] <- "detractor" 
+data$nps.segment[data$nps.score > 6 & data$nps.score < 9] <- "passive"
+data$nps.segment[data$nps.score >= 9] <- "promoter" # Assign segment based on score range
+
+data$nps.segment <- factor(data$nps.segment, levels = c("detractor", "passive", "promoter")) # Convert to factor
+
+# Step 4: Check distribution across NPS segments
+with(data, prop.table(table(nps.segment)))
+
+
+#------ Satisfaction scores (1 to 5 scale)
+
+# Generate satisfaction scores based on NPS
+# We use a normal distribution centered at 3, with some variability (sd = 0.5)
+# and add a scaled component based on NPS to simulate a positive relationship.
+data$satisfaction <- floor(
+  rnorm(data.n, mean = 3, sd = 0.5) + 
+  0.9 * (1 + as.numeric(scale(data$nps.score)))
+)
+
+# Ensure scores stay within the 1–5 range
+data$satisfaction[data$satisfaction < 1] <- 1
+data$satisfaction[data$satisfaction > 5] <- 5
+
+# Visualize the distribution
+barplot(table(data$satisfaction))
+with(data, prop.table(table(satisfaction)))
+
+# Check correlation with NPS scores (Spearman method)
+with(data, cor(nps.score, satisfaction, method = "spearman"))
+
+# Set satisfaction to missing for Drinkland
+data$satisfaction[data$country == "Drinkland"] <- NA_real_
+
+# Set satisfaction to missing for email and web_form contacts
+data$satisfaction[data$method %in% c("email", "web_form")] <- NA_real_
+
+# Introduce 10% additional random missingness among remaining valid values
+na_randomizer <- sample(
+  c(0, 1),
+  size = sum(!is.na(data$satisfaction)),
+  replace = TRUE,
+  prob = c(0.1, 0.9)
+) # Create a random vector (0 = missing, 1 = keep) for non-NA entries
+data$satisfaction[which(!is.na(data$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
+with(data, prop.table(table(is.na(satisfaction), method, country), margin = 2:3)) # Check final distribution
+
+
+```
+
+v
+
+
+## 3.2. Random Selection of Cases to Analyze Complaints
+
+The coding of comments is time consuming, and in the real project we had to select a sample of cases to code for the presence of complaints.  
+
+Although we initially simulated complaints for all subjects in the dataset, we didn't have this data available for all our cases. This data came from further coding for subgroups we wanted to do follow-up analyses (see Section X). Based on this, we're now selecting a stratified sample of 100 cases for each of the available contact methods, for each of the four contact reasons of interest ("incorrect_item", "delay", "status", "cancellation"), and for each of the two relevant countries. This ensures a balanced representation across key dimensions for our specialized analyses.
+
+Specifically, for each method, reason, and country combination, we aim to obtain a sample of 100 subjects and store the results in a new dataset.
+
+
+
+```{r}
+# Optional: Examine the distribution of our current data across the key factors.
+with(data, table(method, reason, country))
+
+
+
+#  --- Define a Function to perform stratified sampling ---
+# This function takes the desired number of samples per group (my.n),
+# the original dataset (my.data), and the names of the three factor columns
+# (my.factor1, my.factor2, my.factor3) as character strings.
+
+f.sample.3f <- function(my.n, my.data, my.factor1, my.factor2, my.factor3){
+  
+  # Input validation: Ensure factor names are passed as character strings.
+  if (!is.character(my.factor1) || !is.character(my.factor2) || !is.character(my.factor3)) {
+    stop("The factors have to be character chains, with names within quotation marks.")
+  }
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  k <- 1 
+  
+  # Iterate through each unique level of the first factor.
+  for (i in unique(my.data[[my.factor1]])){
+    # Within each level of the first factor, iterate through unique levels of the second factor.
+    for(j in unique(my.data[[my.factor2]])){
+      # Within each combination of the first two factors, iterate through unique levels of the third factor.
+      for (q in unique (my.data[[my.factor3]])){
+        
+        # Filter the original dataframe to get the subset of data
+        current.subset <- my.data[my.data[[my.factor1]] == i & 
+                                  my.data[[my.factor2]] == j & 
+                                  my.data[[my.factor3]] == q, ]
+          
+        # Get the number of rows (cases) in the current subset.
+        current_rows <- nrow(current.subset)
+          
+        # Sampling logic based on the size of the current group:
+        if(current_rows == 0){
+          # If the group has no cases, issue an informative warning and go to the next loop
+          warning(paste0("The group (", my.factor1, "=", i, ", ", my.factor2, "=", j, ", ", 
+                         my.factor3, "=", q, ") has no cases."))
+          next 
+        } else if (current_rows >= my.n){
+          # If the group has  equal to or greater cases than the desired n, we take a random sample:
+          current.subset <- current.subset[sample(current_rows, my.n), ]
+        } else if (current_rows < my.n) {
+          # If the group has fewer cases than desired n, include all available cases, with a warning.
+          warning(paste0("The group (", my.factor1, "=", i, ", ", my.factor2, "=", j, ", ", 
+                         my.factor3, "=", q, ") has less cases than the expected n. All available cases will be included."))
+        }
+          
+        # Add the processed subset (either sampled or full) to our list of results.
+        results[[k]] <- current.subset
+        # Increment the counter for the next element in the list.
+        k <- k+1
+          
+      } # End of the third factor (q) loop
+    } # End of the second factor (j) loop
+  } # End of the first factor (i) loop
+
+  # Final check: If the 'results' list is empty after all loops,
+  # it means no groups could be sampled (e.g., all were empty).
+  # In this case, return an empty dataframe.
+  if (length(results) == 0) {
+    message("No groups met the sampling criteria or all groups were empty. Returning an empty data frame.")
+    return(data.frame())
+  }
+  
+  # Combine all dataframes from the 'results' list into a single dataframe.
+  # do.call(rbind, ...) is an efficient way to achieve this.
+  sample.df <- do.call(rbind, results)
+  
+  # Return the final sampled dataframe.
+  return(sample.df)
+}
+
+
+# --- Execute the Sampling Function ---
+
+data.complaints <- f.sample.3f(
+  my.n = 100,             # Desired number of cases per stratum
+  my.data = data,         # Your input dataframe
+  my.factor1 = "method",  # Column name for the first factor (as a character string)
+  my.factor2 = "reason",  # Column name for the second factor (as a character string)
+  my.factor3 = "country"  # Column name for the third factor (as a character string)
+)
+
+
+# Optional: examine the distribution of our sample across the key factors.
+with(data.complaints, table(method, reason, country))
+summary(data.complaints)
+
+```
+
+
+
