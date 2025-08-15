@@ -2,9 +2,10 @@
 title: Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic
   Regression
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-    self_contained: false 
+    self_contained: false
 ---
 
 
@@ -179,11 +180,14 @@ with(data, prop.table(table(complain.other)))
 
 ```
 
-## 3.3. Simulation of NPS scores 
+## 3.3. Simulation of Net Promoter Scores (NPS)
 
-We simulate NPS scores by first assuming a normally distributed base score in the ideal case where customers have no complaints.  
+As our measure of probability to recommend, we used Net Promoter Scores (NPS), which specifically ask customers about the probability to recommend the service to their friends in a scale from 0 (not likely at all) to 10 (extremely likely). 
+
+We simulate NPS scores by first assuming a normally distributed base score in the ideal case where customers have no complaints (e.g., mean = 9).  
 
 Then, we apply fixed score penalties based on the presence of different types of complaints.  
+
 Finally, we constrain scores to the valid NPS range (0–10), convert them to integers, and add placeholders for open-text responses.
 
 ```{r}
