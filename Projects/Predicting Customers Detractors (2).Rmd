@@ -14,7 +14,7 @@ This case study explores opportunities to improve customer service, focusing on 
 
 Specifically, the project presented here is a continuation of a prior exploratory phase: [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
 
-In the present phase depicted in this document, we will focus on **identifying potential improvements and modeling their impact**, using text analysis to evaluate how addressing pain points could enhance customer perceptions.
+In the present phase, we will focus on **identifying potential improvements and modeling their impact**, using text analysis and modeling how addressing pain points could enhance customer perceptions.
 
 Although based on a real-world project, all data, variables, and insights presented here have been simulated to maintain confidentiality.
 
@@ -24,7 +24,7 @@ The analysis includes:
 - Visualization techniques
 - Descriptive statistics
 - Statistical tests
-- Multiple regression modeling
+- Logistic regression modeling
 - Simulation-based recommendations
 - Creation of reusable functions to automate procedures
 
@@ -49,11 +49,12 @@ library(car)         # VIF and regression diagnostics
 
 # 3. Data Simulation
 
-The data simulation will be similar to [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), but with a random selection of comments to analyze within the contextual factors that we decided to follow up: 
+The data simulation will be similar to [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), but with a random selection of cases for each of the issues we want to analyze, which was taken in the original project to avoid excessive work coding textual comments.  
+
 
 ## 3.1. Activating the Data from the Prior Section of the Project
 
-The code below will reproduce the original data from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
+We first reproduce the original data from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), using the code below. For details, please refer to the data simulation section on that project.  
 
 ```{r}
 
@@ -193,7 +194,7 @@ data$nps.score <- floor(data$nps.score)
 data$open.comment <- rep("bla bla", data.n)
 
 # Visualize score distribution
-barplot(table(data$nps.score))
+barplot(table(data$nps.score), ylab = "Frequency", xlab = "NPS Scores")
 with(data, prop.table(table(data$nps.score)))
 
 ## Create NPS segments based on score values
@@ -225,7 +226,7 @@ data$satisfaction[data$satisfaction < 1] <- 1
 data$satisfaction[data$satisfaction > 5] <- 5
 
 # Visualize the distribution
-barplot(table(data$satisfaction))
+barplot(table(data$satisfaction), xlab = "Satisfaction Scores", ylab = "Frequency")
 with(data, prop.table(table(satisfaction)))
 
 # Check correlation with NPS scores (Spearman method)
@@ -247,25 +248,74 @@ na_randomizer <- sample(
 data$satisfaction[which(!is.na(data$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
 with(data, prop.table(table(is.na(satisfaction), method, country), margin = 2:3)) # Check final distribution
 
+#Check the results for the whole dataset
+str(data)
+summary(data)
+
+```
+We can see that the database is created as expected: 
+* A variable "id" to identify each of the 40000 customers of the customer service for which we had data. 
+* The variables "age" and "gender" to account for demographics of the customers. 
+* Three factor variables that define the context of the customer service attention: 
+  * "country" defines which of the country the customer was attende, either Drinkland or Eatland.
+  * "reason" defines the contact reason customers contacted for: cancellations of the order, delays on the order delivery, status of the order, incorrect items received by customers,  or other contact reasons. 
+  * "method" defines the contact method used by customers: either chat, email, phone or a web_form. 
+* Three variables that define outcomes related to the experience of the customers: 
+  * "satisfaction" measured the satisfaction ratings in a scale from 1 to 5. 
+  * "nps.score" measured the probability to recommend the service with the Net Promoter Score (scale from 0 to 10)
+  * "nps.segment" groups customers based on their NPS scores in detractors (scores 0 to 6), passive (scores 7-8), and promoters (scores 9-10).
+* A variable, "open.comment", that contained open feedback from customers, which was used to code the presence of complaints (please note that, for simplifying, we have simulated each comment as "blabla")
+* Five dichotomous variables that in the original project were derived from coding the open.comments, and specified whether customers complaint about certain aspects: 
+  * "complain.connect" for complaints about connection issues.
+  * "complain.sp.respond" for complaints about slow speed in responding, once connection was established. 
+  * "complain.sp.solve" for complaints about slow speed for solving the issue. 
+  * "complain.repeat" for complaints about needing to repeat information. 
+  * "complain.other" for other type of complaints. 
+
+Please note that while we have initially simulated the complain variables for all cases, in the real project this data was not available. They were only available for a sample of cases that we selected within each of the factors we wanted to follow up, once we coded their open comments to identify the complaints. In the next section we simulate the NA cases for the cases that were not selected in that random selection. 
+
+
+## 3.2. Simulation of the Random Selection of Cases to Analyze Complaints
+
+To code for the presence of complaints in the open comments, we wanted to select a random sample of at least 100 cases for each of the contextual factors we identified as relevant to predict the probability to recommend the service in the prior project [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
+
+### 3.2.1.Recapitulation of Relevant Contextual Factors
+
+To remember the relevant factors to predict the probability to recommend, we extract an image with the results of a logistic model that predicted the detractors: 
+
+```{r}
+# Import the image of the mosaic graph about the predicted detractors across contextual factors
+knitr::include_graphics("Predicted.Detractors.png")
 
 ```
 
-v
+After showing these results with the stakeholders and discussing with them the objectives, we wanted to follow up with the identification of complaints across all factors that showed significant differences in this graph, specifically: 
+
+* All the contact methods: phone, chat, email, and webform
+* All the countries: Drinkland and Eatland.
+* Three categories of contact reasons: incorrect items, cancellations, and all other contact reasons. 
 
 
-## 3.2. Random Selection of Cases to Analyze Complaints
+### 3.2.2.Stratified Random Sample Across Each Factor of Interest
 
-The coding of comments is time consuming, and in the real project we had to select a sample of cases to code for the presence of complaints.  
+We first create a variable that groups the contact reasons for only differentiating the categories that we are interested in following up: cancellations, incorrect items, and other. 
 
-Although we initially simulated complaints for all subjects in the dataset, we didn't have this data available for all our cases. This data came from further coding for subgroups we wanted to do follow-up analyses (see Section X). Based on this, we're now selecting a stratified sample of 100 cases for each of the available contact methods, for each of the four contact reasons of interest ("incorrect_item", "delay", "status", "cancellation"), and for each of the two relevant countries. This ensures a balanced representation across key dimensions for our specialized analyses.
+```{r}
+data$reason.grouped <- NA
+data$reason.grouped <- as.factor(ifelse(data$reason == "cancellation", "cancellation", ifelse(data$reason == "incorrect_item", "incorrect_item", "other")))
+```
 
-Specifically, for each method, reason, and country combination, we aim to obtain a sample of 100 subjects and store the results in a new dataset.
+For the remaining contextual factors, method and country, we are interested in following ups across all of their categories, so no changes are needed. 
+
+We proceed with selecting a sample of minimun 100 cases for the combination of each category of interest. 
+
+For that, we specify a reusable function to create random samples across cases. 
 
 
 
 ```{r}
 # Optional: Examine the distribution of our current data across the key factors.
-with(data, table(method, reason, country))
+with(data, table(method, reason.grouped, country))
 
 
 
@@ -335,7 +385,6 @@ f.sample.3f <- function(my.n, my.data, my.factor1, my.factor2, my.factor3){
   }
   
   # Combine all dataframes from the 'results' list into a single dataframe.
-  # do.call(rbind, ...) is an efficient way to achieve this.
   sample.df <- do.call(rbind, results)
   
   # Return the final sampled dataframe.
@@ -343,22 +392,49 @@ f.sample.3f <- function(my.n, my.data, my.factor1, my.factor2, my.factor3){
 }
 
 
+```
+Now we can apply our formula to sample 100 subjects for each level derived from the combination of the three factors of interest: method, reason, and country
+
+```{r}
+
 # --- Execute the Sampling Function ---
 
 data.complaints <- f.sample.3f(
   my.n = 100,             # Desired number of cases per stratum
   my.data = data,         # Your input dataframe
   my.factor1 = "method",  # Column name for the first factor (as a character string)
-  my.factor2 = "reason",  # Column name for the second factor (as a character string)
+  my.factor2 = "reason.grouped",  # Column name for the second factor (as a character string)
   my.factor3 = "country"  # Column name for the third factor (as a character string)
 )
 
 
 # Optional: examine the distribution of our sample across the key factors.
-with(data.complaints, table(method, reason, country))
+with(data.complaints, table(method, reason.grouped, country))
 summary(data.complaints)
+
 
 ```
 
+The data selection is as expected. 
 
+Now we can convert the complaint variables as factors: 
+
+```{r}
+#Convert the complaint variables to factors
+data.complaints$complain.connect <- factor(data.complaints$complain.connect)
+data.complaints$complain.sp.respond <- factor(data.complaints$complain.sp.respond)
+data.complaints$complain.sp.solve <- factor(data.complaints$complain.sp.solve)
+data.complaints$complain.repeat <- factor(data.complaints$complain.repeat)
+data.complaints$complain.other <- factor(data.complaints$complain.other)
+
+#Check the conversion: 
+summary(data.complaints)
+
+```
+We have the data ready for analysis. 
+
+
+ 
+
+  
 
