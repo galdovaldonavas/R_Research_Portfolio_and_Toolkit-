@@ -1,0 +1,90 @@
+---
+title: "Sampling Resources"
+output: html_notebook
+---
+
+# 1. Functions
+
+## Stratified Random Sample Across 3 Factors of Interest
+
+* Expected Output: a sample dataset from an original dataset that includes random samples of an specified n for all groups defined by the combination of 3 factors in your original dataset
+
+* Input: 
+  * The desired number of samples per group (my.n)
+  * The original dataset (my.data)
+  * The names of the three factor columns in the dataset (my.factor1, my.factor2, my.factor3) as character strings.
+  
+* Potential adaptations: 
+  * The sample sizes for each subgroup might be specified within the formula
+
+```{r}
+
+f.sample.3f <- function(my.n, my.data, my.factor1, my.factor2, my.factor3){
+  
+  # Input validation: Ensure factor names are passed as character strings.
+  if (!is.character(my.factor1) || !is.character(my.factor2) || !is.character(my.factor3)) {
+    stop("The factors have to be character chains, with names within quotation marks.")
+  }
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  k <- 1 
+  
+  # Iterate through each unique level of the first factor.
+  for (i in unique(my.data[[my.factor1]])){
+    # Within each level of the first factor, iterate through unique levels of the second factor.
+    for(j in unique(my.data[[my.factor2]])){
+      # Within each combination of the first two factors, iterate through unique levels of the third factor.
+      for (q in unique (my.data[[my.factor3]])){
+        
+        # Filter the original dataframe to get the subset of data
+        current.subset <- my.data[my.data[[my.factor1]] == i & 
+                                  my.data[[my.factor2]] == j & 
+                                  my.data[[my.factor3]] == q, ]
+          
+        # Get the number of rows (cases) in the current subset.
+        current_rows <- nrow(current.subset)
+          
+        # Sampling logic based on the size of the current group:
+        if(current_rows == 0){
+          # If the group has no cases, issue an informative warning and go to the next loop
+          warning(paste0("The group (", my.factor1, "=", i, ", ", my.factor2, "=", j, ", ", 
+                         my.factor3, "=", q, ") has no cases."))
+          next 
+        } else if (current_rows >= my.n){
+          # If the group has  equal to or greater cases than the desired n, we take a random sample:
+          current.subset <- current.subset[sample(current_rows, my.n), ]
+        } else if (current_rows < my.n) {
+          # If the group has fewer cases than desired n, include all available cases, with a warning.
+          warning(paste0("The group (", my.factor1, "=", i, ", ", my.factor2, "=", j, ", ", 
+                         my.factor3, "=", q, ") has less cases than the expected n. All available cases will be included."))
+        }
+          
+        # Add the processed subset (either sampled or full) to our list of results.
+        results[[k]] <- current.subset
+        # Increment the counter for the next element in the list.
+        k <- k+1
+          
+      } # End of the third factor (q) loop
+    } # End of the second factor (j) loop
+  } # End of the first factor (i) loop
+
+  # Final check: If the 'results' list is empty after all loops,
+  # it means no groups could be sampled (e.g., all were empty).
+  # In this case, return an empty dataframe.
+  if (length(results) == 0) {
+    message("No groups met the sampling criteria or all groups were empty. Returning an empty data frame.")
+    return(data.frame())
+  }
+  
+  # Combine all dataframes from the 'results' list into a single dataframe.
+  sample.df <- do.call(rbind, results)
+  
+  # Return the final sampled dataframe.
+  return(sample.df)
+}
+
+```
+
