@@ -434,7 +434,231 @@ summary(data.complaints)
 We have the data ready for analysis. 
 
 
- 
 
+
+
+# 4. Explorations with Descriptives and Visualizations
+
+We first calculate the percentages of complaints across methods and reasons
+
+
+```{r}
+
+f.prop.2f <- function(my.data, my.dv.list, my.factor1, my.factor2){
   
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factors
+  f1.levels <- unique (my.data[[my.factor1]])
+  f2.levels <- unique (my.data[[my.factor2]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf1 in f1.levels){
+        for(lf2 in f2.levels){
+          
+          # Extract the vector, successes and number of cases
+          current.vector <- my.data[my.data[[my.factor1]]==lf1 & my.data[[my.factor2]]==lf2, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(dep.variable = dv, factor1 = lf1, factor2 = lf2, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+        } # close the loop for factor 2
+      } # close the loop for factor 1
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+```
+
+
+Then we can apply the function to our database
+
+```{r}
+#Indicate the dependent variables  in a vector
+dv.variables <- c("complain.connect", "complain.sp.respond",  "complain.sp.solve", "complain.repeat", "complain.other")
+
+# Apply the function
+prop.df <- f.prop.2f (my.data = data.complaints , my.dv.list = dv.variables, my.factor1 = "method", my.factor2 = "reason.grouped")
+
+#Check if the proportions are as expected
+table.connect <- with(data.complaints, table(complain.connect, method, reason.grouped))
+prop.connect <-  prop.table(table.connect, margin = 2:3)
+prop.connect
+
+```
+Finally, we represent the results in a graph
+
+```{r}
+
+# Gráfico
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ dep.variable, scales = "free_y") +
+  labs(
+    x = "Método",
+    y = "Porcentaje (%)",
+    fill = "Razón de queja",
+    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  geom_text(
+    aes(label = sprintf("%.1f%%", percentage)),
+    position = position_dodge(width = 0.8),
+    vjust = -0.5,
+    size = 3
+  ) +
+  facet_wrap(~ dep.variable, scales = "free_y") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "Método",
+    y = "Porcentaje (%)",
+    fill = "Razón de queja",
+    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "bottom"
+  )
+
+
+```
+
+
+
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  geom_text(
+    aes(label = sprintf("%.1f%%", percentage)),
+    position = position_dodge(width = 0.8),
+    vjust = -0.5,
+    size = 3
+  ) +
+  facet_wrap(~ dep.variable, scales = "free_y") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "Método",
+    y = "Porcentaje (%)",
+    fill = "Razón de queja",
+    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+```
+
+Make the graph
+
+
+
+```{r, fig.width=8, fig.height=10}
+
+
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  geom_text(
+    aes(label = sprintf("%.1f%%", percentage)),
+    position = position_dodge(width = 0.8),
+    hjust = -0.7,  # en horizontal cambiamos de vjust -> hjust
+    size = 3
+  ) +
+  facet_wrap(~ dep.variable, scales = "free_y") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "Método",
+    y = "Porcentaje (%)",
+    fill = "Razón de queja",
+    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "bottom"
+  ) +
+  coord_flip()
+
+
+```
+
+# 5. Discovering Opportunities for Incorrect Item Cases Attended Through Chat
+
+For simplification purposes, we will just depict analysis to identify opportunities for this contextual factor in which users who experience incorrect item deliveries are attended through chat, the case that was associated with more detractors in our prior project. Similar analysis would apply to the follow up of other contextual factors. 
+
+```{r}
+
+```
 
