@@ -1,0 +1,78 @@
+---
+title: "Percentages with CI across Multiple Variables and Subgroups"
+output: html_notebook
+---
+
+
+# 1. Functions
+
+## Percentages & CI for a List of Dichotomous DVs and 2 Grouping Factors
+
+* Expected Outcome: a dataframe with columns for percentages and 95% CI limits for all dvs and subgroups specified
+
+* Input: 
+  * The original dataframe (my.data).
+  * The name of a vector that lists the dependent variables of interest (that vector has to contain the variable names as character strings). 
+  * The names of the factors used for the subgroups (my.factor1, my.factor2), as character strings. 
+
+```{r}
+f.prop.2f <- function(my.data, my.dv.list, my.factor1, my.factor2){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factors
+  f1.levels <- unique (my.data[[my.factor1]])
+  f2.levels <- unique (my.data[[my.factor2]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf1 in f1.levels){
+        for(lf2 in f2.levels){
+          
+          # Extract the vector, successes and number of cases
+          current.vector <- my.data[my.data[[my.factor1]]==lf1 & my.data[[my.factor2]]==lf2, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(dep.variable = dv, factor1 = lf1, factor2 = lf2, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+        } # close the loop for factor 2
+      } # close the loop for factor 1
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+```
+
+* Example of Usage: 
+
+```{r}
+prop.df <- f.prop.2f (my.data = data.complaints , my.dv.list = dv.variables, my.factor1 = "method", my.factor2 = "reason.grouped")
+
+```
+
