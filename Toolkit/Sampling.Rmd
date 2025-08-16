@@ -88,3 +88,51 @@ f.sample.3f <- function(my.n, my.data, my.factor1, my.factor2, my.factor3){
 
 ```
 
+
+* Example of usage: 
+
+```{r}
+data.complaints <- f.sample.3f(
+  my.n = 100,             # Desired number of cases per stratum
+  my.data = data,         # Your input dataframe
+  my.factor1 = "method",  # Column name for the first factor (as a character string)
+  my.factor2 = "reason.grouped",  # Column name for the second factor (as a character string)
+  my.factor3 = "country"  # Column name for the third factor (as a character string)
+)
+```
+
+
+
+# 2. Examples of Other Sampling Resources
+
+## Random Samples in Specified Subgroups
+
+This exemplifies how to perform random samples in two subgroups, from the project "Predicting Customers Detractors (2)". 
+
+```{r}
+
+# Specify the sample sizes for both samples
+sample.n <- 200
+
+# Sample 1: Cases of chat attending incorrect items
+subset_chat_incorrect<- data[data$reason == "incorrect_item" & data$method == "chat", ]
+subset1.rows <- nrow(subset_chat_incorrect)
+sample_chat_incorrect <- subset_chat_incorrect[sample(1:subset1.rows, sample.n), ]
+sample_chat_incorrect$condition <- "chat_incorrect_item"
+
+#Sample 2: Cases of chat attending other issues
+subset_chat_other <- data[!(data$reason == "incorrect_item") & data$method == "chat", ]
+subset2.rows <- nrow(subset_chat_other)
+sample_chat_other <- subset_chat_other[sample(1:subset2.rows, sample.n), ]
+sample_chat_other$condition <- "chat_other_issues"
+
+#Bind together the two samples in a dataset
+data.ch.i <- bind_rows(sample_chat_incorrect, sample_chat_other)
+data.ch.i$condition <- factor(data.ch.i$condition)
+#Check the final sample
+summary(data.ch.i)
+
+```
+
+```
+
