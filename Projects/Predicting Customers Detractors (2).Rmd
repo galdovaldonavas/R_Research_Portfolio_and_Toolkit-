@@ -275,6 +275,41 @@ We can see that the database is created as expected:
 Please note that while we have initially simulated the complain variables for all cases, in the real project this data was not available. They were only available for a sample of cases that we selected within each of the factors we wanted to follow up, once we coded their open comments to identify the complaints. In the next section we simulate the NA cases for the cases that were not selected in that random selection. 
 
 
+# 4. Discussion of Follow Ups Needed Based on Prior Results
+
+In the prior study [Predicting Customer Detractors (Part 1)](https://rpubs.com/galdovaldonavas/1335090), we observed several contextual factors in customer service that are associated with higher levels of detractors, that is, with a lower probability to recommend our service. We summarize these results in the charts below:
+
+```{r}
+# Import the image of the mosaic graph about the predicted detractors across contextual factors
+knitr::include_graphics("Predicted.Detractors.png")
+
+```
+
+Based on the evidence (and discussions with stakeholders on it), we prioritize a follow up of cases attended by chat for incorrect item issues, since this factor shows the largest increase in detractors, both in relative and absolute terms. For this purpose, we will compare customer complaints in cases involving incorrect items when attended via chat versus when handled through other channels. 
+
+Since incorrect items on their own are not associated with more detractors, we focus exclusively on cases where they occur in combination with chat attendance.
+
+
+v2
+In the previous phase, the model revealed that chat interactions generally increase the likelihood of detractors, and that the effect is even stronger when chat is combined with incorrect item issues. Since incorrect items alone do not raise detractors, this suggests that the negative impact comes from the interaction of these two factors.
+
+For this reason, in this phase we focus on comparing chat + incorrect item cases vs. chat + other issues. This allows us to isolate the complaints that make the combination of chat and incorrect items particularly problematic.
+
+A broader comparison between chat and other contact channels will be explored in a later phase, to assess whether chat underperforms across all types of issues or mainly in specific scenarios.
+
+
+
+In the real project, these results were discussed with stakeholders to prioritize the contextual factors that we wanted to explore further and identify opportunities. 
+
+A potential decision could be prioritizing the identification of improvement opportunities in cases attended by chat and that contact for incorrect item issues, the factor that is associated with higher increases in detractors, both in relative terms and in absolute terms. 
+
+For that, we will compare complaints in cases that experience incorrect item when they are attended through chat versus through other means. 
+
+Since the presence of incorrect items appears to have no effect on additional detractors when is not accompanied by chat attendance, we will not include the comparison of cases of incorrect items versus other issues when chat is not present. 
+
+
+
+
 ## 3.2. Simulation of the Random Selection of Cases to Analyze Complaints
 
 To code for the presence of complaints in the open comments, we wanted to select a random sample of at least 100 cases for each of the contextual factors we identified as relevant to predict the probability to recommend the service in the prior project [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
