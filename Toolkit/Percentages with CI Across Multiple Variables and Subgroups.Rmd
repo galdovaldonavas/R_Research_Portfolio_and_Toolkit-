@@ -76,3 +76,61 @@ prop.df <- f.prop.2f (my.data = data.complaints , my.dv.list = dv.variables, my.
 
 ```
 
+We can use a bar graph to depict the results, e.g.: 
+
+
+
+```{r}
+
+# Setting the order of the complaints variables
+prop.df$dep.variable <- factor(prop.df$dep.variable, levels = c("complain.connect", "complain.repeat", "complain.sp.respond", "complain.sp.solve", "complain.other"))
+
+# Titles for each faceted graph representing a type of complaint
+custom_titles <- c(
+  complain.connect   = "Connection Problems",
+  complain.repeat     = "Need to Repeat Information",
+  complain.sp.respond = "Slow Responses",
+  complain.sp.solve   = "Slow Resolution",
+  complain.other      = "Other Complaints"
+)
+
+# Plotting the bar graph
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(dep.variable = custom_titles)) +
+  labs(
+    y = "% of Complaints",
+    fill = "Country",
+    title = "% of Chat Complaints by Issue Type"
+  ) +
+  scale_x_discrete(labels = c ("incorrect item", "other issue")) +
+  ylim(0, 100) +  
+  geom_text(
+    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -3,                             # slightly above the bar
+    size = 2.5                                # text size
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = c(1, 0),
+    legend.justification = c("right", "bottom"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text  = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
+```
+
