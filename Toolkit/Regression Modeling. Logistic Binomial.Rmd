@@ -1,0 +1,205 @@
+---
+title: "Regression Modeling: Logistic Binomial Models"
+output: html_notebook
+---
+
+
+# 1. Functions
+
+## Function and Preliminary Code for Creating Metrics to Interpret Binomial Model
+
+To interpret the results of our binomial logistic regression, we can compute several complementary metrics for each of the factors:
+
+- **Predicted percentage of successes** for the presence of each factor (while holding others constant).
+
+- **Differences in predicted percentages of successes** compared to the baseline.
+
+- **Relative probabilities** (risk ratios).
+
+- **Odds ratios**.
+
+To calculate the predicted proportions, we first need to build a design matrix that represents the isolated presence of each factor (and the intercept) in a way compatible with our model specification. This will allow us to generate predictions for each scenario separately.
+
+
+### Preliminary matrix simulation
+
+We provide a reusable code to create this matrix based on the project [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), which can be edited depending on the needs: 
+
+```{r}
+#####
+# Design Matrix for Predictions
+#####
+
+# Extract the factor names from the model, with and without the intercept
+f.names.interc <- names(coef(binomial.model.c))
+f.names <- f.names.interc[-1]
+
+# Create a matrix with 1s on the diagonal (each case represents one factor set to 1)
+my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
+my.matrix.df[, 1] <- f.names.interc
+names(my.matrix.df) <- c("case", f.names)
+
+# Correct the interaction term so its components are also activated
+my.matrix.df$chat[my.matrix.df$case == "chat_incorrect_item"] <- 1
+my.matrix.df$incorrect_item[my.matrix.df$case == "chat_incorrect_item"] <- 1
+
+# Ensure factor variables match the dataset format: we need to do it for country. 
+names(my.matrix.df)[names(my.matrix.df) == "countryDrinkland"] <- "country"
+my.matrix.df$country[my.matrix.df$country == 1] <- "Drinkland"
+my.matrix.df$country[my.matrix.df$country == 0] <- "Eatland"
+my.matrix.df$country <- as.factor(my.matrix.df$country)
+
+# Quick check of the structure
+str(my.matrix.df)
+
+```
+
+
+### Function to Obtain Metrics
+
+* Expected Outcome: a dataframe with metrics and 95% CI limits for a specified logistic model. The metrics include: 
+  * Predicted percentage of successes for the presence of each factor (while holding others constant).
+  * Differences in predicted percentages of successes compared to the baseline.
+  *Relative probabilities (risk ratios).
+  *Odds ratios.
+
+* Input: 
+  * The logistic binomial model.
+  * The matrix specified in the prior section, edited as necessary. 
+
+```{r}
+
+#####
+#Function to obtain key interpretation metrics for a binomial logistic model
+#####
+
+
+f.metrics.binomial <- function(my.model, my.matrix){
+  
+  #--------1. Preliminary Checks: 
+  
+  # Making sure the model is glm binomial
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("The function requires a binomial model.")
+  }
+  
+  
+  #--------2. Odds Ratios
+  
+  # Obtaining the coefficients and confidence intervals
+  coefs <- coef(my.model)
+  ci <- confint(my.model)
+  intercept <- coefs[1]
+  
+  # Exponentiation of the coefficients and their CIs to obtain odds ratios
+  or <- exp(coefs)
+  or_ci <- exp(ci)
+  
+  
+  #--------3. Relative Probabilities (Risk Ratios)
+  
+  # Calculating the base probability from the intercept
+  p0 <- or[1] / (1 + or[1])
+  
+  # Obtaining relative probabilities from risk ratios and base probability
+  rp <- or / ((1 - p0) + (p0 * or))
+  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
+  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
+  
+  
+  #--------4. Predicted Proportions
+  
+  # Extract log-odds and their sd for the individual presence of the factors (using the specified matrix)
+  pred <- predict(my.model, newdata = my.matrix, type = "link", se.fit = TRUE)
+
+  #Calculate confidence intervals in log-odds
+  lower_logit <- pred$fit - 1.96 * pred$se.fit
+  upper_logit <- pred$fit + 1.96 * pred$se.fit
+
+  #Specify a function to transform log-odds to probabilities
+  f.inv_logit <- function(x) {1 / (1 + exp(-x))}
+  
+  #Apply the function to the log-odds and the limits of their ci
+  predicted_prob <- f.inv_logit(pred$fit) # Predicted probabilities
+  lower_predicted_prob <- f.inv_logit(lower_logit) # Lower limit of CI for predicted probabilities
+  upper_predicted_prob <- f.inv_logit(upper_logit) # Upper limit of CI for predicted probabilities
+
+  
+  #--------5. Differences in Predicted Probabilities via Bootstrap
+
+  # Simulate a distribution of log-odds, for example with 10000 cases
+  set.seed(123)
+  simulated_log_odds <- as.data.frame(matrix(
+  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
+  ncol = length(pred$fit), byrow = TRUE
+  ))
+
+  # Transform logg-odds to expected probabilities (using the formula specified above)
+  simulated_probs <- f.inv_logit(simulated_log_odds)
+
+  # Calculate differences from the first column, which correspond to the intercept probabilities
+  diffs <- apply(simulated_probs, 2, function(col){
+  col - simulated_probs[[1]]
+  })
+
+  # Calculate the means of the differences and 95% CI with percentiles
+  prob_diff <- colMeans(diffs)
+  lower_prob_diff  <- apply(diffs, 2, quantile, probs = 0.025)
+  upper_prob_diff <- apply(diffs, 2, quantile, probs = 0.975)
+  
+  
+  #-------- 6. Combine Results
+  
+  results <- data.frame(
+    Term = names(rp),
+    Prediction = as.numeric(predicted_prob)*100,
+    Lower_Prediction = as.numeric(lower_predicted_prob)*100,
+    Upper_Prediction = as.numeric(upper_predicted_prob)*100,
+    Predicted_Change = as.numeric(prob_diff)*100,
+    Lower_Predicted_Change = as.numeric(lower_prob_diff)*100,
+    Upper_Predicted_Change = as.numeric(upper_prob_diff)*100,
+    Relative_Probability = as.numeric(rp),
+    Lower_Relative_Probability = as.numeric(rp_ci_low),
+    Upper_Relative_Probability = as.numeric(rp_ci_high),
+    Odds_Ratio = as.numeric(or),
+    Lower_Odds_Ratio = as.numeric(or_ci[,1]),
+    Upper_Odds_Ratio = as.numeric(or_ci[,2])
+)
+  
+  # Remove meaningless metrics for intercept
+  results[1, c("Predicted_Change",
+             "Lower_Predicted_Change",
+             "Upper_Predicted_Change",
+             "Relative_Probability",
+             "Lower_Relative_Probability",
+             "Upper_Relative_Probability",
+             "Odds_Ratio",
+             "Lower_Odds_Ratio",
+             "Upper_Odds_Ratio")] <- NA_real_
+
+  
+  # Return the results
+  return(results)
+}
+
+
+```
+
+
+* Example of Usage: 
+
+This example comes from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
+
+```{r}
+
+# Apply the function to the final binomial model
+model.metrics.df <- f.metrics.binomial(binomial.model.c, my.matrix.df)
+
+# Display the resulting metrics
+model.metrics.df
+
+```
+
+
+
+
