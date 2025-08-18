@@ -201,5 +201,45 @@ model.metrics.df
 ```
 
 
+* Example of plotting the results: 
+This example comes from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090). 
+
+```{r}
+# Add descriptive labels for each factor
+ord.model.metrics.df$Label <- NA_character_
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "(Intercept)"] <- 
+  "Baseline: Typical issues handled via phone in Eatland"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "chat_incorrect_item"] <- 
+  "Chat support for incorrect item issues"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "email"] <- 
+  "Support via email"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "chat"] <- 
+  "Support via chat"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "web_form"] <- 
+  "Support via web form"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "countryDrinkland"] <- 
+  "Support in Drinkland"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "cancellation"] <- 
+  "Support for cancellation issues"
+ord.model.metrics.df$Label[ord.model.metrics.df$Term == "incorrect_item"] <- 
+  "Support for incorrect item issues"
+
+# Create the dot-and-whisker plot for the predictions
+ggplot(ord.model.metrics.df, aes(x = Prediction, 
+                    y = reorder(Label, Prediction))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
+  geom_errorbarh(aes(xmin = Lower_Prediction, xmax = Upper_Prediction), height = 0.2) +
+  geom_point(size = 3) +
+    geom_text(aes(label = paste(round(Prediction,1), "%")), 
+            vjust = -1, size = 3.5) + 
+  labs(
+    title = "Expected Detractors By Key Customer Service Factors",
+    x = "% of Detractors",
+    y = "Customer Service Factors"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
 
 
