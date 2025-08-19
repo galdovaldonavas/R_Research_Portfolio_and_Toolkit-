@@ -766,13 +766,78 @@ ggplot(m.solve2.metrics.df, aes(x = Prediction,
 The graph clearly illustrates the substantial difference in predicted complaint rates between chats addressing incorrect item issues and those handling other issues. The 95% confidence intervals for the two groups are separated by more than 20 percentage points, highlighting a robust difference.
 
 
+## 5.3. Further Specificity Coding and Analyzing Key Complaints
+
+Once we identified that complaints about slow resolution speed were driving the difference between incorrect item issues and other issues within chat cases, it became important to further identify and code for the specific problems users were raising. This would allow us to evaluate whether these problems represented opportunities for improvement.
+
+In the original project, this type of qualitative coding is sometimes carried out during the first coding phase whenever such issues could be identified. Otherwise, it was conducted later for categories that showed meaningful differences, as we are doing here.
+
+
+### 5.3.1. Coded Data for Specific Slow Resolution Complaints
+
+To illustrate this coding step, we simulate a distribution of specific complaints depending on whether the case involved incorrect item issues or other issues, and on whether the case already complained about slow resolution issues:
+* Presence of complaints about slow resolution: 
+  * Incorrect item issues: 
+    * 70% of complaints about difficulties attaching the photo to the chat.
+    * 20% of complaints about slow procedures checking the information. 
+    * 10% of unspecific or ambiguous complaints about slow resolution. 
+  * Other issues: 
+    * 6% of complaints about difficulties attaching the photo to the chat. 
+    * 64% of complaints about slow procedures checking the information.
+    * 30% of unspecific or ambiguous complaints about slow resolution.
+*For cases that did not complain about slow resolution we assume no complains in any of the above categories.  
+  
+  
+```{r}
+
+# Save the levels for the specific problems in slow resolution complaints
+levels.sp.solve <- c("difficulties_loading_photos", "slow_information_check", "unespecific")
+
+# Create an empty variable to code the specific problems in slow resolution complaints
+data.ch.i$sp.solve.problem <- NA_character_
+
+# -- Data simulation for cases experiencing incorrect item issues and complaining about slow resolution
+# Create the subset
+subset.ii <- data.ch.i[data.ch.i$condition == "chat_incorrect_item" & data.ch.i$complain.sp.solve == 1, ]
+# Save the n of the subset
+n.subset.ii <- nrow(subset.ii)
+# Introduce values for the specific problems in slow resolution complaints
+subset.ii$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.ii, replace = TRUE, prob = c(.70, .20, .10))
+
+# -- Data simulation for cases experiencing other issues and complaining about slow resolution
+# Create the subset
+subset.oi <- data.ch.i[data.ch.i$condition == "chat_other_issues" & data.ch.i$complain.sp.solve == 1, ]
+# Save the n of the subset
+n.subset.oi <- nrow(subset.oi)
+# Introduce values for the specific problems in slow resolution complaints
+subset.oi$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.oi, replace = TRUE, prob = c(0.06, .64, .30))
+
+# -- Data simulation for cases not complaining about slow resolution
+# Create the subset
+subset.no.c <- data.ch.i[data.ch.i$complain.sp.solve == 0, ]
+# Introduce values, specifying no complains of slow resolution
+subset.no.c$sp.solve.problem <- "no complaints about resolution"
+
+# Group again the subsets
+data.ch.i <- bind_rows(subset.ii, subset.oi, subset.no.c)
+
+# Display distribution of coded problems by condition
+with(data.ch.i, table(sp.solve.problem, complain.sp.solve, condition))
 
 
 
-SEGUIR AQUÍ: 
+```
+
+
+
+
+SEGUIR AQUÍ:
+- Graficar la frecuencia en ambas condiciones: un gráfico de barras con categorías distribuidas entre 0 y 100 en la misma barra. 
 - Modelar la influencia de corregir el issue: 
-  - Creando una base de datos con la frecuencia corregida
-  - Aplicando los coeficientes a la nueva base de datos para predecir si son detractores o no. 
+  - Modelando el impacto de las quejas en la creación de detractores (¿puedo incluir quejas generales de sp.solve para ver si su efecto es significativo tras incluir las quejas específicas...?, no creo que sea posible, pues es una variable que está totalmente contenida en las quejas específicas. Parece no necesario)
+  - Simular una base de datos con valores predichos al caso de que se eliminen los problemas
+  
+
 
 
 
