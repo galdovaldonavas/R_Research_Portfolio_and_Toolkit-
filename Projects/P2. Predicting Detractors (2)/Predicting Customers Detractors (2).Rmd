@@ -1,12 +1,12 @@
 ---
-title: "Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities via Text Analysis"
+title: "Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities Via Text Analysis"
 output:
   pdf_document: default
   html_document:
     df_print: paged
     self_contained: false
 ---
-
+Title: Predicting Customer Detractors (Part 2): Analyzing Opportunities From Category Codes of Comments
 
 # 1. Introduction
 
@@ -466,6 +466,7 @@ ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
   )
 
 ```
+
 The graphs suggest that chat attention to incorrect item issues and chat attention to other issues differ mainly in the presence of slow resolution complaints. These are substantially more common for incorrect item issues (46%–49% depending on the country) compared to other issues (7%–15%).
 
 The graphs also suggest that this pattern of results is consistent across countries. 
@@ -766,14 +767,14 @@ ggplot(m.solve2.metrics.df, aes(x = Prediction,
 The graph clearly illustrates the substantial difference in predicted complaint rates between chats addressing incorrect item issues and those handling other issues. The 95% confidence intervals for the two groups are separated by more than 20 percentage points, highlighting a robust difference.
 
 
-## 5.3. Further Specificity Coding and Analyzing Key Complaints
+## 5.3. Text Coding & Analyses of Specific Problems
 
 Once we identified that complaints about slow resolution speed were driving the difference between incorrect item issues and other issues within chat cases, it became important to further identify and code for the specific problems users were raising. This would allow us to evaluate whether these problems represented opportunities for improvement.
 
 In the original project, this type of qualitative coding is sometimes carried out during the first coding phase whenever such issues could be identified. Otherwise, it was conducted later for categories that showed meaningful differences, as we are doing here.
 
 
-### 5.3.1. Coded Data for Specific Slow Resolution Complaints
+### 5.3.1. Data for Specific Problems in Slow Resolution Complaints
 
 To illustrate this coding step, we simulate a distribution of specific complaints depending on whether the case involved incorrect item issues or other issues, and on whether the case already complained about slow resolution issues:
 * Presence of complaints about slow resolution: 
@@ -791,7 +792,7 @@ To illustrate this coding step, we simulate a distribution of specific complaint
 ```{r}
 
 # Save the levels for the specific problems in slow resolution complaints
-levels.sp.solve <- c("difficulties_loading_photos", "slow_information_check", "unespecific")
+levels.sp.solve <- c("Difficulties loading photos", "Slow information check", "Unespecific")
 
 # Create an empty variable to code the specific problems in slow resolution complaints
 data.ch.i$sp.solve.problem <- NA_character_
@@ -813,21 +814,350 @@ n.subset.oi <- nrow(subset.oi)
 subset.oi$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.oi, replace = TRUE, prob = c(0.06, .64, .30))
 
 # -- Data simulation for cases not complaining about slow resolution
-# Create the subset
+# Create the subset and keep the NA values
 subset.no.c <- data.ch.i[data.ch.i$complain.sp.solve == 0, ]
-# Introduce values, specifying no complains of slow resolution
-subset.no.c$sp.solve.problem <- "no complaints about resolution"
 
-# Group again the subsets
+
+# -- Integrate the procedures in the dataset
+# Regroup the subsets
 data.ch.i <- bind_rows(subset.ii, subset.oi, subset.no.c)
 
-# Display distribution of coded problems by condition
+# Express the variable as a factor
+data.ch.i$sp.solve.problem <- factor(data.ch.i$sp.solve.problem)
+
+# Check the simulation by displaying distribution of coded problems by condition
 with(data.ch.i, table(sp.solve.problem, complain.sp.solve, condition))
+
+```
+
+The data has been simulated as expected. We proceed with the analyses. 
+
+
+
+### 5.3.2. Exploratory Analyses of Specific Problems
+
+To explore whether the higher complains about slow resolution for incorrect item issues is also associated with a different nature of problems, we can conduct a table of proportions for incorrect items versus other issues
+
+```{r}
+#Calculate a frequency table and save it
+table.problems <- with(data.ch.i, table(sp.solve.problem, condition))
+table.problems
+# Calculate the table of proportions from the frequency table
+prop.table(table.problems, margin =2)
+#Visualize the proportions with a mosaic plot
+plot (table.problems)
+
+```
+The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues. 
+
+This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items. 
+
+We further check if this difference in the distribution of problems is statistically significant, using a chi-square test. Also, since some expected frequencies were below 5, Fisher’s exact test was also conducted as a robustness check. 
+
+```{r}
+# Perform the chi-square test 
+chisq.test(table.problems)
+#Perform the Fisher test
+fisher.test(table.problems)
+
+```
+
+Both the chi-square test and Fisher’s exact test confirmed that the distribution of slow resolution problems significantly differed between incorrect item cases and other issues, supporting the idea that incorrect item complaints are uniquely shaped by the requirement of uploading photos.
+
+
+### 5.3.2.1 Exploring the Correspondence of Additional Complaints and Specific Problems
+
+In order to disentangle whether the larger number of slow resolution complaints in incorrect item cases is mainly driven by photo upload problems, we integrate the coding of complaint type with the presence/absence of slow resolution complaints. This allows us to visualize both the absolute and relative contribution of each type of problem across conditions. 
+
+We first create a variable that integrates both the presence of complaints and the type of probelem complained about
+
+```{r}
+# Create a factor variable that indicates both the presence of complaints and the problems in the complaints
+data.ch.i$sp.solve.problem.c <- as.character(data.ch.i$sp.solve.problem)
+data.ch.i$sp.solve.problem.c [data.ch.i$complain.sp.solve == 0] <- "No slow resolution complain"
+data.ch.i$sp.solve.problem.c <- factor (data.ch.i$sp.solve.problem.c, levels = c("No slow resolution complain", "Difficulties loading photos","Unespecific", "Slow information check"))
+
+
+#Check if the recodification worked as expected
+summary(data.ch.i)
+
+```
+
+Then we specify a function to obtain the percentages of each category of a dependent variable  across all the levels of our factor, and the binomial 95% confidence intervals
+
+```{r}
+f.prop.multicategory.1f <- function(my.data, my.dv, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the dependent variable and the factor
+  dv.levels <- unique (my.data[[my.dv]])
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each factor level
+    for (fl in f.levels){
+      
+    #Extract the vector and clean for missing cases
+    current.vector <- my.data[my.data[[my.factor]]== fl, my.dv]
+    current.vector.c <- current.vector[!is.na(current.vector)] #cleaning missing cases
+      
+      #Create a loop for each dv level  
+      for (dvl in dv.levels){
+          
+      # Extract the successes and number of cases
+      n <- length(current.vector.c) # number of cases in the vector
+      s <- length(current.vector.c[current.vector.c == dvl]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(factor = fl, dv.level = dvl, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+
+      } # close the loop for the dv levels
+    } # close the loop for the factor levels
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+```
+
+
+Then we apply the function to our dependent variable - the presence and type of slow resolution complaints - and to our factor - chat attention to incorrect item cases or to other cases. 
+
+```{r}
+complaints.problems.df <- f.prop.multicategory.1f(data.ch.i, "sp.solve.problem.c", "condition")
+complaints.problems.df
+
+```
+
+
+```{r}
+
+# Specify the order for the presentation of the dv levels
+
+complaints.problems.df$dv.level <- factor(complaints.problems.df$dv.level, levels = c("No slow resolution complain", "Difficulties loading photos","Unespecific", "Slow information check"))
+
+# Gráfico con barras apiladas proporcionales usando tu dataframe
+ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
+  geom_col(position = "stack", width = 0.6) +
+
+  # Etiquetas de ejes y título
+  labs(x = "Condition",
+       y = "% of Cases",
+       fill = "Problem type",
+       title = "Distribution of Problems in Slow Resolution Complaints") +
+  
+  # Renombrar condiciones
+  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
+                              "chat_other_issues" = "Other issue")) +
+  
+  # Colores manuales
+  scale_fill_manual(values = c(
+    "No slow resolution complain" = "grey95",      
+    "Difficulties loading photos" = "antiquewhite4", 
+    "Slow information check" = "antiquewhite1",      
+    "Unespecific" = "antiquewhite3"                  
+  )) +
+  
+  theme_minimal(base_size = 14)
+
+
+```
+
+
+```{r}
+ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+                position = position_dodge(width = 0.8),
+                width = 0.2, color = "black") +
+  labs(x = "Condition",
+       y = "% of Cases",
+       fill = "Complaint type",
+       title = "Distribution of slow resolution complaint types across conditions") +
+  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
+                              "chat_other_issues" = "Other issue")) +
+  scale_fill_manual(values = c(
+    "No slow resolution complain" = "grey95",
+    "Difficulties loading photos" = "antiquewhite4",
+    "Slow information check" = "antiquewhite1",
+    "Unespecific" = "antiquewhite3"
+  )) +
+  theme_minimal(base_size = 14)
+
+```
+
+
+
+SEGUIR ADAPTANDO EL CÓDIGO: 
+- Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, para ponerlo con y sin CI
+- Reescribir: 
+  - simular los datos para que las categorías no sean excluyentes. 
+  - ver si hay diferencias con chi cuadrados entre las condiciones. utilizar una fórmula de agrupación, como by
+  - aplicar fórmula de variables dicotómicas y su representación gráfica (reutilizar de antes). 
+  - recodificar las variable a una sola de tal manera que pueda ver la contribución del problema de las photos, siguiendo el gráfico que hay he hecho aquí. 
+
+- Modelar el impacto de las distintas quejas. 
+
+  
+
+
+
+
+
+
+```{r}
+
+# Obtain the frequency table
+table.problems.c <- with (complaints.problems.df, table(sp.solve.problem.c, condition))
+table.problems.c
+
+#Mark the order of the condition variable
+data.ch.i$condition <- factor (data.ch.i$condition, levels = c("chat_incorrect_item", "chat_other_issue"))
+
+#Graph the distribution across conditions
+ggplot(data.ch.i, aes(x = condition, fill = sp.solve.problem.c)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Condition",
+       y = "% of Cases",
+       fill = "Complaint type",
+       title = "Distribution of slow resolution complaint types across conditions") + 
+  scale_x_discrete(labels = c ("Incorrect item", "Other issue")) +
+  scale_fill_manual(values = c(
+    "No slow resolution complain" = "grey95",  # gris muy claro
+    "Difficulties loading photos" = "antiquewhite4", # verde
+    "Slow information check" = "antiquewhite1",      # naranja
+    "Unespecific" = "antiquewhite3"                  # violeta
+  )) +
+      theme_minimal()
 
 
 
 ```
 
+
+
+
+
+
+
+```{r}
+
+# Obtain the frequency table
+table.problems.c <- with (data.ch.i, table(sp.solve.problem.c, condition))
+table.problems.c
+
+#Mark the order of the condition variable
+data.ch.i$condition <- factor (data.ch.i$condition, levels = c("chat_incorrect_item", "chat_other_issue"))
+
+#Graph the distribution across conditions
+ggplot(data.ch.i, aes(x = condition, fill = sp.solve.problem.c)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Condition",
+       y = "% of Cases",
+       fill = "Complaint type",
+       title = "Distribution of slow resolution complaint types across conditions") + 
+  scale_x_discrete(labels = c ("Incorrect item", "Other issue")) +
+  scale_fill_manual(values = c(
+    "No slow resolution complain" = "grey95",  # gris muy claro
+    "Difficulties loading photos" = "antiquewhite4", # verde
+    "Slow information check" = "antiquewhite1",      # naranja
+    "Unespecific" = "antiquewhite3"                  # violeta
+  )) +
+      theme_minimal()
+
+
+
+
+
+
+```
+```{r}
+ggplot(data.ch.i, aes(x = condition, fill = sp.solve.problem.c)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Condition",
+       y = "Proportion",
+       fill = "Complaint type",
+       title = "Distribution of slow resolution complaint types across conditions") + 
+  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item", 
+                              "chat_other_issues" = "Other issue")) +
+  scale_fill_manual(values = c(
+    "No slow resolution complain" = "grey90",  # gris muy claro
+    "difficulties_loading_photos" = "#1b9e77", # verde
+    "slow_information_check" = "#d95f02",      # naranja
+    "unespecific" = "#7570b3"                  # violeta
+  )) +
+  theme_minimal()
+
+```
+
+
+```{r}
+
+# Plotting the bar graph
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(dep.variable = custom_titles)) +
+  labs(
+    y = "% of Complaints",
+    fill = "Country",
+    title = "% of Chat Complaints by Issue Type"
+  ) +
+  scale_x_discrete(labels = c ("incorrect item", "other issue")) +
+  ylim(0, 100) +  
+  geom_text(
+    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -3,                             # slightly above the bar
+    size = 2.5                                # text size
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = c(1, 0),
+    legend.justification = c("right", "bottom"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text  = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
+```
 
 
 
