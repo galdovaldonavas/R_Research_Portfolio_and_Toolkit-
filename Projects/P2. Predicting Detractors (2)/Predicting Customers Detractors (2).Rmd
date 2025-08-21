@@ -303,7 +303,6 @@ Reviewing all comments in the dataset would be an unrealistic workload. Therefor
 
 Using the code below, we take a random sample for each of the comparison conditions: chat cases involving incorrect items versus chat cases involving other issues. We set the size of these samples to 200 cases each, which can provide sufficient statistical power and represents an affordable coding workload coding the comments. 
 
-
 ```{r}
 
 # Specify the sample sizes for both samples
@@ -767,9 +766,9 @@ ggplot(m.solve2.metrics.df, aes(x = Prediction,
 The graph clearly illustrates the substantial difference in predicted complaint rates between chats addressing incorrect item issues and those handling other issues. The 95% confidence intervals for the two groups are separated by more than 20 percentage points, highlighting a robust difference.
 
 
-## 5.3. Text Coding & Analyses of Specific Problems
+## 5.3. Further Text Coding & Analyses of Specific Problems
 
-Once we identified that complaints about slow resolution speed were driving the difference between incorrect item issues and other issues within chat cases, it became important to further identify and code for the specific problems users were raising. This would allow us to evaluate whether these problems represented opportunities for improvement.
+Once we identified that complaints about slow resolution speed were driving the difference between incorrect item issues and other issues within chat cases, it became important to further identify and code for the specific problems users were raising. 
 
 In the original project, this type of qualitative coding is sometimes carried out during the first coding phase whenever such issues could be identified. Otherwise, it was conducted later for categories that showed meaningful differences, as we are doing here.
 
@@ -783,11 +782,42 @@ To illustrate this coding step, we simulate a distribution of specific complaint
     * 20% of complaints about slow procedures checking the information. 
     * 10% of unspecific or ambiguous complaints about slow resolution. 
   * Other issues: 
-    * 6% of complaints about difficulties attaching the photo to the chat. 
+    * 5% of complaints about difficulties attaching the photo to the chat. 
     * 64% of complaints about slow procedures checking the information.
     * 30% of unspecific or ambiguous complaints about slow resolution.
 *For cases that did not complain about slow resolution we assume no complains in any of the above categories.  
   
+```{r}
+
+# Save the number of cases in the dataset
+n.data.ch.i <- nrow (data.ch.i)
+
+# ---- Code for Problems Present in the Slow Resolution Complaints
+
+## Problems attaching the photo in the chat
+
+# Base probability in other issues: 10%
+prob_photo <- rep(0.05, n.data.ch.i)
+# For incorrect item issues, this probability is multiplied by 14
+prob_photo[data.ch.i$condition == "chat_incorrect_item"] <- prob_photo[data.ch.i$condition == "chat_incorrect_item"] * 14
+# Ensure probability values remain within [0, 1]
+prob_photo [prob_photo > 1] <- 1
+prob_photo [prob_photo < 0] <- 0
+# Generate binary variable based on probabilities
+data.ch.i$problem.photo <- rbinom(n = n.data.ch.i, size = 1, prob = prob_photo)
+# Code for the absence of scores in cases with no slow resolution complaints
+data.ch.i$problem.photo [data.ch.i$complain.sp.solve == 0] <- NA_real_
+# Check distribution across conditions
+with(data.ch.i, prop.table(table(problem.photo, condition), margin = 2))
+
+
+```
+
+SEGUIR AQUÍ LA SIMULACIÓN Y EL RESTO DE ANÁLISIS
+
+```
+  
+
   
 ```{r}
 
