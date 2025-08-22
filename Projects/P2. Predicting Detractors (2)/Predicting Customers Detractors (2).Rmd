@@ -775,19 +775,16 @@ In the original project, this type of qualitative coding is sometimes carried ou
 
 ### 5.3.1. Data Simulation for Specific Problems in Slow Resolution Complaints
 
-To illustrate this coding step, we simulate a distribution of specific problems present in slow resolution complaints, whose distribution varied across cases with incorrect items and other cases: 
+To realistically illustrate the coding of slow resolution complaints, we assume that a single complaint may mention more than one specific problem. The simulation therefore proceeds in two steps:
 
-* Within the 47.5% of cases of *incorrect items* who complained about slow resolution: 
-  * 72% probability of just mentioning difficulties loading photos in the chat
-  * 12% probability of just mentioning slow procedures checking information 
-  * 4% of probability mentioning both problems 
-  * 12% of unespecified problems 
-  
-* Within the 11.5% of cases of *other issues* who complained about slow resolution: 
-  * 5% probability of just mentioning difficulties loading photos in the chat 
-  * 47.4% probability of just mentioning slow procedures checking information 
-  * 0.2% probability of mentioning both problems 
-  * 47.4% probability of unespecified problems
+Number of problems mentioned (K). For each case, we first draw how many problems are mentioned (none, one, two, or three). This step allows us to keep a reasonable proportion of “unspecified” complaints (when K=0) while also controlling the degree of overlap between problems (when K>1).
+
+Selection of specific problems. Given the value of K, we then assign the actual problems without replacement, with probabilities weighted by the case condition (incorrect item vs. other issue). This way, problems with uploading photos are much more likely to occur in incorrect item cases, whereas in other issues other types of problems tend to dominate.
+
+This approach ensures that:
+– The share of unspecified complaints remains realistic,
+– Co-occurrence of problems does not inflate artificially,
+– And most importantly, the excess of slow resolution complaints in the incorrect item condition can be explained primarily by difficulties with uploading photos, which is the theoretically expected pattern.
  
  
  
@@ -829,7 +826,7 @@ for(i in idx){
   
   # elige distribución de K según condición
   pk <- if(cond == "chat_incorrect_item") pk_incorrect else pk_other
-  K  <- as.integer(sample(as.integer(names(pk)), size = 1, prob = pk))
+  K <- as.integer(sample(as.integer(names(pk)), size = 1, prob = pk))
   
   # elige pesos según condición
   w  <- if(cond == "chat_incorrect_item") w_incorrect else w_other
@@ -853,13 +850,29 @@ for(i in idx){
 
 # 6) Para quienes NO tienen queja, deja NA (o pon 0 si prefieres)
 no_idx <- which(data.ch.i$complain.sp.solve == 0)
-data.ch.i[no_idx, c("problem.photo","problem.info","problem.deadline","problem.unspecified")] <- NA_real_
+data.ch.i[no_idx, c("problem.photo","problem.info","problem.deadline","problem.unspecified")] <- 0
 
 
-# Check the 
+# Check the results
+with(data.ch.i, table(problem.photo, condition))
+with(data.ch.i, table(problem.info, condition))
+with(data.ch.i, table(problem.deadline, condition))
+with(data.ch.i, table(problem.unspecified, condition))
+
 
 ```
  
+SEGUIR AQUÍ EL RESTO DE ANÁLISIS
+
+SEGUIR ADAPTANDO EL CÓDIGO: 
+- Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, para ponerlo con y sin CI
+- Reescribir: 
+  - ver si hay diferencias con chi cuadrados/modelos logísticos entre las condiciones. utilizar una fórmula de agrupación, como by
+  - aplicar fórmula de variables dicotómicas y su representación gráfica (reutilizar de antes). 
+  - opcional: recodificar las variable a una sola de tal manera que pueda ver la contribución del problema de las photos, siguiendo el gráfico que haya he hecho aquí. 
+
+- Modelar el impacto de las distintas quejas. (o si quiero solo de una - la que haya marcado diferencias)
+
  
  
 ```{r}
@@ -960,9 +973,6 @@ with(data.ch.i, table(problem.photo, problem.info, problem.deadline, problem.uns
 
 ```
 
-SEGUIR AQUÍ LA SIMULACIÓN Y EL RESTO DE ANÁLISIS
-
-```
   
 
   
