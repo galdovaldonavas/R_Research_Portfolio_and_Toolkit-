@@ -773,42 +773,189 @@ Once we identified that complaints about slow resolution speed were driving the 
 In the original project, this type of qualitative coding is sometimes carried out during the first coding phase whenever such issues could be identified. Otherwise, it was conducted later for categories that showed meaningful differences, as we are doing here.
 
 
-### 5.3.1. Data for Specific Problems in Slow Resolution Complaints
+### 5.3.1. Data Simulation for Specific Problems in Slow Resolution Complaints
 
-To illustrate this coding step, we simulate a distribution of specific complaints depending on whether the case involved incorrect item issues or other issues, and on whether the case already complained about slow resolution issues:
-* Presence of complaints about slow resolution: 
-  * Incorrect item issues: 
-    * 70% of complaints about difficulties attaching the photo to the chat.
-    * 20% of complaints about slow procedures checking the information. 
-    * 10% of unspecific or ambiguous complaints about slow resolution. 
-  * Other issues: 
-    * 5% of complaints about difficulties attaching the photo to the chat. 
-    * 64% of complaints about slow procedures checking the information.
-    * 30% of unspecific or ambiguous complaints about slow resolution.
-*For cases that did not complain about slow resolution we assume no complains in any of the above categories.  
+To illustrate this coding step, we simulate a distribution of specific problems present in slow resolution complaints, whose distribution varied across cases with incorrect items and other cases: 
+
+* Within the 47.5% of cases of *incorrect items* who complained about slow resolution: 
+  * 72% probability of just mentioning difficulties loading photos in the chat
+  * 12% probability of just mentioning slow procedures checking information 
+  * 4% of probability mentioning both problems 
+  * 12% of unespecified problems 
+  
+* Within the 11.5% of cases of *other issues* who complained about slow resolution: 
+  * 5% probability of just mentioning difficulties loading photos in the chat 
+  * 47.4% probability of just mentioning slow procedures checking information 
+  * 0.2% probability of mentioning both problems 
+  * 47.4% probability of unespecified problems
+ 
+ 
+ 
+```{r}
+
+# 1) Limpia/crea columnas de problemas (multi-etiqueta)
+vars <- c("problem.photo","problem.info","problem.deadline","problem.unspecified")
+for(v in vars) data.ch.i[[v]] <- NA_real_
+
+# 2) Parámetros: número de problemas por queja (puedes ajustar por condición si quieres)
+#    K = 0 => unspecified; K >= 1 => se asignan K problemas distintos sin reemplazo
+pk_other    <- c(`0` = 0.10, `1` = 0.70, `2` = 0.18, `3` = 0.02)   # other issues
+pk_incorrect<- c(`0` = 0.05, `1` = 0.70, `2` = 0.22, `3` = 0.03)   # incorrect item
+
+# 3) Pesos por condición para elegir problemas (sin reemplazo)
+probs <- c("photo","info","deadline")
+w_other     <- c(photo = 0.05, info = 0.60, deadline = 0.35)       # otras incidencias
+w_incorrect <- c(photo = 0.70, info = 0.20, deadline = 0.10)       # incorrect item
+
+# 4) Función auxiliar: muestreo sin reemplazo ponderado
+sample_weighted_no_replace <- function(items, weights, k){
+  if(k <= 0) return(character(0))
+  picked <- character(0)
+  w <- weights
+  for(i in seq_len(k)){
+    p <- w / sum(w)
+    choice <- sample(items, size = 1, prob = p)
+    picked <- c(picked, choice)
+    w[choice] <- 0  # quita el elegido (sin reemplazo)
+  }
+  picked
+}
+
+# 5) Asignación fila a fila, SOLO en quienes tienen queja de slow resolution
+idx <- which(data.ch.i$complain.sp.solve == 1)
+
+for(i in idx){
+  cond <- data.ch.i$condition[i]
+  
+  # elige distribución de K según condición
+  pk <- if(cond == "chat_incorrect_item") pk_incorrect else pk_other
+  K  <- as.integer(sample(as.integer(names(pk)), size = 1, prob = pk))
+  
+  # elige pesos según condición
+  w  <- if(cond == "chat_incorrect_item") w_incorrect else w_other
+  
+  # inicializa a 0 (para quienes tienen queja)
+  data.ch.i$problem.photo[i]       <- 0
+  data.ch.i$problem.info[i]        <- 0
+  data.ch.i$problem.deadline[i]    <- 0
+  data.ch.i$problem.unspecified[i] <- 0
+  
+  if(K == 0){
+    # unspecified
+    data.ch.i$problem.unspecified[i] <- 1
+  } else {
+    chosen <- sample_weighted_no_replace(probs, w, K)
+    if("photo"    %in% chosen) data.ch.i$problem.photo[i]    <- 1
+    if("info"     %in% chosen) data.ch.i$problem.info[i]     <- 1
+    if("deadline" %in% chosen) data.ch.i$problem.deadline[i] <- 1
+  }
+}
+
+# 6) Para quienes NO tienen queja, deja NA (o pon 0 si prefieres)
+no_idx <- which(data.ch.i$complain.sp.solve == 0)
+data.ch.i[no_idx, c("problem.photo","problem.info","problem.deadline","problem.unspecified")] <- NA_real_
+
+
+# Check the 
+
+```
+ 
+ 
+ 
+```{r}
+
+
+# Save the levels for the specific problems in slow resolution complaints
+levels.sp.solve <- c("Difficulties loading photos", "Slow information check", "Both problems", "Unespecified problem")
+
+# Create an empty variable to code the specific problems in slow resolution complaints
+data.ch.i$sp.solve.problem <- NA_character_
+
+# -- Data simulation for slow resolution complaints within *incorrect item cases*
+# Create the subset
+subset.ii <- data.ch.i[data.ch.i$condition == "chat_incorrect_item" & data.ch.i$complain.sp.solve == 1, ]
+# Save the n of the subset
+n.subset.ii <- nrow(subset.ii)
+# Introduce values for the specific problems in slow resolution complaints
+subset.ii$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.ii, replace = TRUE, prob = c(.65, .15, .05, .15))
+
+# -- Data simulation for cases experiencing other issues and complaining about slow resolution
+# Create the subset
+subset.oi <- data.ch.i[data.ch.i$condition == "chat_other_issues" & data.ch.i$complain.sp.solve == 1, ]
+# Save the n of the subset
+n.subset.oi <- nrow(subset.oi)
+# Introduce values for the specific problems in slow resolution complaints
+subset.oi$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.oi, replace = TRUE, prob = c(0.05, .474, 0.002, .474))
+
+# -- Data simulation for cases not complaining about slow resolution
+# Create the subset and keep the NA values
+subset.no.c <- data.ch.i[data.ch.i$complain.sp.solve == 0, ]
+
+
+# -- Integrate the procedures in the dataset
+# Regroup the subsets
+data.ch.i <- bind_rows(subset.ii, subset.oi, subset.no.c)
+
+# Express the variable as a factor
+data.ch.i$sp.solve.problem <- factor(data.ch.i$sp.solve.problem)
+
+# Check the simulation by displaying distribution of coded problems by condition
+with(data.ch.i, table(sp.solve.problem, complain.sp.solve, condition))
+
+```
+ 
+ 
+ 
   
 ```{r}
 
 # Save the number of cases in the dataset
 n.data.ch.i <- nrow (data.ch.i)
 
-# ---- Code for Problems Present in the Slow Resolution Complaints
+# ---- Code Simulation for Problems Present in the Slow Resolution Complaints
 
-## Problems attaching the photo in the chat
-
-# Base probability in other issues: 10%
+## - Problems attaching the photo in the chat
+# Base probability in other issues: 5%
 prob_photo <- rep(0.05, n.data.ch.i)
 # For incorrect item issues, this probability is multiplied by 14
-prob_photo[data.ch.i$condition == "chat_incorrect_item"] <- prob_photo[data.ch.i$condition == "chat_incorrect_item"] * 14
-# Ensure probability values remain within [0, 1]
-prob_photo [prob_photo > 1] <- 1
-prob_photo [prob_photo < 0] <- 0
+prob_photo[data.ch.i$condition == "chat_incorrect_item"] <- prob_photo[data.ch.i$condition == "chat_incorrect_item"] * 15
 # Generate binary variable based on probabilities
 data.ch.i$problem.photo <- rbinom(n = n.data.ch.i, size = 1, prob = prob_photo)
 # Code for the absence of scores in cases with no slow resolution complaints
 data.ch.i$problem.photo [data.ch.i$complain.sp.solve == 0] <- NA_real_
 # Check distribution across conditions
 with(data.ch.i, prop.table(table(problem.photo, condition), margin = 2))
+
+
+## - Problems of slow process checking the information
+# Generate binary variable based on 60% probability for remaining cases
+data.ch.i$problem.info <- rbinom(n = n.data.ch.i, size = 1, prob = .60)
+# Code for the absence of scores in cases with no slow resolution complaints
+data.ch.i$problem.info [data.ch.i$complain.sp.solve == 0] <- NA_real_
+# Check distribution across conditions
+with(data.ch.i, prop.table(table(problem.info, condition), margin = 2))
+
+
+## - Problems of failing promised deadlines
+# Generate binary variable based on 30% probability
+data.ch.i$problem.deadline <- rbinom(n = n.data.ch.i, size = 1, prob = .30)
+# Code for the absence of scores in cases with no slow resolution complaints
+data.ch.i$problem.deadline [data.ch.i$complain.sp.solve == 0] <- NA_real_
+# Check distribution across conditions
+with(data.ch.i, prop.table(table(problem.deadline, condition), margin = 2))
+
+
+## - Unespecified problems in slow resolution complaints
+# Create a variable with NAs
+data.ch.i$problem.unspecified <- NA_real_
+# Input 0 if other problems have specified in slow resolution complaints, 1 otherwise
+data.ch.i$problem.unspecified [data.ch.i$problem.photo == 1 | data.ch.i$problem.info == 1 | data.ch.i$problem.deadline == 1 ] <- 0
+data.ch.i$problem.unspecified [!(data.ch.i$problem.photo == 1 | data.ch.i$problem.info == 1 | data.ch.i$problem.deadline == 1) & data.ch.i$complain.sp.solve == 1] <- 1
+# Check distribution across conditions
+with(data.ch.i, prop.table(table(problem.unspecified, condition), margin = 2))
+
+#General check of the distributions
+with(data.ch.i, table(problem.photo, problem.info, problem.deadline, problem.unspecified, useNA="ifany"))
 
 
 ```
