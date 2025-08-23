@@ -865,7 +865,7 @@ with(data.ch.i, table(problem.unspecified, condition))
 
 
 
-# 5.3.2. Exploration with Descriptives and Visualizations of Specific Problems
+# 5.3.2. Exploratory Analyses of Specific Problems
 
 To see the percentage of problems across our conditions, we apply our function (see section x)
 
@@ -948,11 +948,145 @@ ggplot(prob.prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
 
 ```
 
-We can see that problems loading photos are specially present in slow resolution complaints of incorrect item issues, while these type of problems rarely appear in other type of issues. 
 
-It also looks like the difference across conditions in the presence of slow resolution complaints is proportional to the difference across conditions to in the mention of problems loading photos. We can see this better in a graph that superpose the proportions. 
+The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues. 
+
+Further plotting can help us visualize the extent to which the presence of slow resolution complaints is proportional to the difference across conditions to in the mention of problems loading photos. 
 
 
+### 5.3.2.1 Exploring the Correspondence of Additional Complaints and Specific Problems
+
+In order to disentangle whether the larger number of slow resolution complaints in incorrect item cases is mainly driven by photo upload problems, we create a multicategorical variable that integrates the presence of complaints, the complaints mentioning problems loading photos, and complaints mentioning other problems. 
+
+```{r}
+# Create a factor that integrates presence of slow resolution complaints and mentions to photo issues
+data.ch.i$sp.solve.complain.problem <- NA_character_
+data.ch.i$sp.solve.complain.problem [data.ch.i$no.complain.sp.solve == 1] <- "No slow resolution complaint"
+data.ch.i$sp.solve.complain.problem [data.ch.i$problem.photo == 1] <- "Chat not loading photos"
+data.ch.i$sp.solve.complain.problem [!data.ch.i$no.complain.sp.solve == 1 & !data.ch.i$problem.photo == 1] <- "Other problems"
+data.ch.i$sp.solve.complain.problem  <- factor (data.ch.i$sp.solve.complain.problem, levels = c("No slow resolution complaint","Chat not loading photos", "Other problems"))
+
+
+#Check if the recodification worked as expected
+with(data.ch.i, table(sp.solve.complain.problem, no.complain.sp.solve, problem.photo))
+
+```
+
+
+Then we specify a function to obtain the percentages of each category of a dependent variable  across all the levels of our factor, and the binomial 95% confidence intervals
+
+```{r}
+f.prop.multicategory.1f <- function(my.data, my.dv, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the dependent variable and the factor
+  dv.levels <- unique (my.data[[my.dv]])
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each factor level
+    for (fl in f.levels){
+      
+    #Extract the vector and clean for missing cases
+    current.vector <- my.data[my.data[[my.factor]]== fl, my.dv]
+    current.vector.c <- current.vector[!is.na(current.vector)] #cleaning missing cases
+      
+      #Create a loop for each dv level  
+      for (dvl in dv.levels){
+          
+      # Extract the successes and number of cases
+      n <- length(current.vector.c) # number of cases in the vector
+      s <- length(current.vector.c[current.vector.c == dvl]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(factor = fl, dv.level = dvl, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+
+      } # close the loop for the dv levels
+    } # close the loop for the factor levels
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+```
+
+
+Then we apply the function to our dependent variable representing the presence and type of slow resolution complaints segregated by our condition. 
+
+```{r}
+complaints.problems.df <- f.prop.multicategory.1f(data.ch.i, "sp.solve.complain.problem", "condition")
+complaints.problems.df
+
+```
+
+
+Finally, we can plot the results in a bar graph with bars stacked by proportions
+
+```{r}
+
+#Specify the order of the dv variable levels in the new dataframe
+complaints.problems.df$dv.level  <- factor (complaints.problems.df$dv.level, levels = c("No slow resolution complaint","Chat not loading photos", "Other problems"))
+
+
+
+# Graph with stacked bars
+ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
+  geom_col(position = "stack", width = 0.6) +
+
+  # Specify titles and labels
+  labs(x = "Condition",
+       y = "% of Cases",
+       fill = "Problem type",
+       title = "Share of Photo Problems in Slow Resolution Complaints") +
+  
+  # Rename the conditions
+  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
+                              "chat_other_issues" = "Other issue")) +
+  
+  # Introduce colors of the stacked bars
+  scale_fill_manual(values = c(
+    "No slow resolution complaint" = "grey95",      
+    "Chat not loading photos" = "antiquewhite3", 
+    "Other problems" = "antiquewhite1"
+  )) +
+    # Add the data labels (if they are not too crowded)
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), # add the data label with 1 decimal
+            position = position_stack(vjust = 0.5), # Centers the label in the vertical axis
+            color = "black", # color of the data leabel text
+            size = 3) + # size of the data label text
+  
+  theme_minimal(base_size = 14)
+
+
+```
+We can see that the difference in complaints is mainly associated to the difference in the presence of problems loading photos for the incorrect item cases. 
+
+This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items, while this photo requirement is rare in other cases. 
+
+We further check if the differences in the presence of the problems are statistically significant, using a logistic models.
 
 
 
@@ -963,173 +1097,17 @@ SEGUIR ADAPTANDO EL CÓDIGO:
 - Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, para ponerlo con y sin CI
 - Reescribir: 
   - ver si hay diferencias con chi cuadrados/modelos logísticos entre las condiciones. utilizar una fórmula de agrupación, como by
-  - aplicar fórmula de variables dicotómicas y su representación gráfica (reutilizar de antes). 
-  - opcional: recodificar las variable a una sola de tal manera que pueda ver la contribución del problema de las photos, siguiendo el gráfico que haya he hecho aquí. 
-
 - Modelar el impacto de las distintas quejas. (o si quiero solo de una - la que haya marcado diferencias)
+- Recoger distintos gráficos en el Tookit
 
  
  
-```{r}
 
-
-# Save the levels for the specific problems in slow resolution complaints
-levels.sp.solve <- c("Difficulties loading photos", "Slow information check", "Both problems", "Unespecified problem")
-
-# Create an empty variable to code the specific problems in slow resolution complaints
-data.ch.i$sp.solve.problem <- NA_character_
-
-# -- Data simulation for slow resolution complaints within *incorrect item cases*
-# Create the subset
-subset.ii <- data.ch.i[data.ch.i$condition == "chat_incorrect_item" & data.ch.i$complain.sp.solve == 1, ]
-# Save the n of the subset
-n.subset.ii <- nrow(subset.ii)
-# Introduce values for the specific problems in slow resolution complaints
-subset.ii$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.ii, replace = TRUE, prob = c(.65, .15, .05, .15))
-
-# -- Data simulation for cases experiencing other issues and complaining about slow resolution
-# Create the subset
-subset.oi <- data.ch.i[data.ch.i$condition == "chat_other_issues" & data.ch.i$complain.sp.solve == 1, ]
-# Save the n of the subset
-n.subset.oi <- nrow(subset.oi)
-# Introduce values for the specific problems in slow resolution complaints
-subset.oi$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.oi, replace = TRUE, prob = c(0.05, .474, 0.002, .474))
-
-# -- Data simulation for cases not complaining about slow resolution
-# Create the subset and keep the NA values
-subset.no.c <- data.ch.i[data.ch.i$complain.sp.solve == 0, ]
-
-
-# -- Integrate the procedures in the dataset
-# Regroup the subsets
-data.ch.i <- bind_rows(subset.ii, subset.oi, subset.no.c)
-
-# Express the variable as a factor
-data.ch.i$sp.solve.problem <- factor(data.ch.i$sp.solve.problem)
-
-# Check the simulation by displaying distribution of coded problems by condition
-with(data.ch.i, table(sp.solve.problem, complain.sp.solve, condition))
-
-```
- 
- 
- 
-  
-```{r}
-
-# Save the number of cases in the dataset
-n.data.ch.i <- nrow (data.ch.i)
-
-# ---- Code Simulation for Problems Present in the Slow Resolution Complaints
-
-## - Problems attaching the photo in the chat
-# Base probability in other issues: 5%
-prob_photo <- rep(0.05, n.data.ch.i)
-# For incorrect item issues, this probability is multiplied by 14
-prob_photo[data.ch.i$condition == "chat_incorrect_item"] <- prob_photo[data.ch.i$condition == "chat_incorrect_item"] * 15
-# Generate binary variable based on probabilities
-data.ch.i$problem.photo <- rbinom(n = n.data.ch.i, size = 1, prob = prob_photo)
-# Code for the absence of scores in cases with no slow resolution complaints
-data.ch.i$problem.photo [data.ch.i$complain.sp.solve == 0] <- NA_real_
-# Check distribution across conditions
-with(data.ch.i, prop.table(table(problem.photo, condition), margin = 2))
-
-
-## - Problems of slow process checking the information
-# Generate binary variable based on 60% probability for remaining cases
-data.ch.i$problem.info <- rbinom(n = n.data.ch.i, size = 1, prob = .60)
-# Code for the absence of scores in cases with no slow resolution complaints
-data.ch.i$problem.info [data.ch.i$complain.sp.solve == 0] <- NA_real_
-# Check distribution across conditions
-with(data.ch.i, prop.table(table(problem.info, condition), margin = 2))
-
-
-## - Problems of failing promised deadlines
-# Generate binary variable based on 30% probability
-data.ch.i$problem.deadline <- rbinom(n = n.data.ch.i, size = 1, prob = .30)
-# Code for the absence of scores in cases with no slow resolution complaints
-data.ch.i$problem.deadline [data.ch.i$complain.sp.solve == 0] <- NA_real_
-# Check distribution across conditions
-with(data.ch.i, prop.table(table(problem.deadline, condition), margin = 2))
-
-
-## - Unespecified problems in slow resolution complaints
-# Create a variable with NAs
-data.ch.i$problem.unspecified <- NA_real_
-# Input 0 if other problems have specified in slow resolution complaints, 1 otherwise
-data.ch.i$problem.unspecified [data.ch.i$problem.photo == 1 | data.ch.i$problem.info == 1 | data.ch.i$problem.deadline == 1 ] <- 0
-data.ch.i$problem.unspecified [!(data.ch.i$problem.photo == 1 | data.ch.i$problem.info == 1 | data.ch.i$problem.deadline == 1) & data.ch.i$complain.sp.solve == 1] <- 1
-# Check distribution across conditions
-with(data.ch.i, prop.table(table(problem.unspecified, condition), margin = 2))
-
-#General check of the distributions
-with(data.ch.i, table(problem.photo, problem.info, problem.deadline, problem.unspecified, useNA="ifany"))
-
-
-```
 
   
 
   
-```{r}
 
-# Save the levels for the specific problems in slow resolution complaints
-levels.sp.solve <- c("Difficulties loading photos", "Slow information check", "Unespecific")
-
-# Create an empty variable to code the specific problems in slow resolution complaints
-data.ch.i$sp.solve.problem <- NA_character_
-
-# -- Data simulation for cases experiencing incorrect item issues and complaining about slow resolution
-# Create the subset
-subset.ii <- data.ch.i[data.ch.i$condition == "chat_incorrect_item" & data.ch.i$complain.sp.solve == 1, ]
-# Save the n of the subset
-n.subset.ii <- nrow(subset.ii)
-# Introduce values for the specific problems in slow resolution complaints
-subset.ii$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.ii, replace = TRUE, prob = c(.70, .20, .10))
-
-# -- Data simulation for cases experiencing other issues and complaining about slow resolution
-# Create the subset
-subset.oi <- data.ch.i[data.ch.i$condition == "chat_other_issues" & data.ch.i$complain.sp.solve == 1, ]
-# Save the n of the subset
-n.subset.oi <- nrow(subset.oi)
-# Introduce values for the specific problems in slow resolution complaints
-subset.oi$sp.solve.problem <- sample(x = levels.sp.solve, size = n.subset.oi, replace = TRUE, prob = c(0.06, .64, .30))
-
-# -- Data simulation for cases not complaining about slow resolution
-# Create the subset and keep the NA values
-subset.no.c <- data.ch.i[data.ch.i$complain.sp.solve == 0, ]
-
-
-# -- Integrate the procedures in the dataset
-# Regroup the subsets
-data.ch.i <- bind_rows(subset.ii, subset.oi, subset.no.c)
-
-# Express the variable as a factor
-data.ch.i$sp.solve.problem <- factor(data.ch.i$sp.solve.problem)
-
-# Check the simulation by displaying distribution of coded problems by condition
-with(data.ch.i, table(sp.solve.problem, complain.sp.solve, condition))
-
-```
-
-The data has been simulated as expected. We proceed with the analyses. 
-
-
-
-### 5.3.2. Exploratory Analyses of Specific Problems
-
-To explore whether the higher complains about slow resolution for incorrect item issues is also associated with a different nature of problems, we can conduct a table of proportions for incorrect items versus other issues
-
-```{r}
-#Calculate a frequency table and save it
-table.problems <- with(data.ch.i, table(sp.solve.problem, condition))
-table.problems
-# Calculate the table of proportions from the frequency table
-prop.table(table.problems, margin =2)
-#Visualize the proportions with a mosaic plot
-plot (table.problems)
-
-```
 The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues. 
 
 This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items. 
