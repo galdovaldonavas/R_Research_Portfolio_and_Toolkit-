@@ -862,7 +862,102 @@ with(data.ch.i, table(problem.unspecified, condition))
 
 ```
  
-SEGUIR AQUÍ EL RESTO DE ANÁLISIS
+
+
+
+# 5.3.2. Exploration with Descriptives and Visualizations of Specific Problems
+
+To see the percentage of problems across our conditions, we apply our function (see section x)
+
+
+```{r}
+
+# Create a variable that indicates the absence of slow resolution complains
+data.ch.i$no.complain.sp.solve <- NA_real_
+data.ch.i$no.complain.sp.solve [data.ch.i$complain.sp.solve == 1] <- 0
+data.ch.i$no.complain.sp.solve [data.ch.i$complain.sp.solve == 0] <- 1
+
+
+#Specify the list of dependent variables as a vector
+dv.problems <- c("no.complain.sp.solve", "problem.photo", "problem.info", "problem.deadline", "problem.unspecified")
+
+# Calculate the percentages using the reusable function
+prob.prop.df <- f.prop.2f (my.data = data.ch.i , my.dv.list = dv.problems, my.factor1 = "condition", my.factor2 = "country")
+
+#See the results
+prob.prop.df
+
+```
+
+
+We can depict the results in a graph
+
+```{r}
+
+
+# Setting the order of the complaints variables
+prob.prop.df$dep.variable <- factor(prob.prop.df$dep.variable, levels = c("no.complain.sp.solve", "problem.photo", "problem.info", "problem.deadline", "problem.unspecified"))
+
+# Titles for each faceted graph representing a type of complaint
+custom_titles <- c(
+  no.complain.sp.solve = "No Complaints",
+  problem.photo   = "Chat Not Loading Photos",
+  problem.info    = "Slow Information Checks",
+  problem.deadline = "Unmet Deadlines",
+  problem.unspecified   = "Unspecified Problems"
+)
+
+# Plotting the bar graph
+ggplot(prob.prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(dep.variable = custom_titles)) +
+  labs(
+    y = "% of Cases",
+    fill = "Country",
+    title = "Problems in Slow Resolution Complaints"
+  ) +
+  scale_x_discrete(labels = c ("incorrect item", "other issue")) +
+  ylim(0, 110) +  
+  geom_text(
+    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -2,                             # slightly above the bar
+    size = 2.5                                # text size
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = c(1, 0),
+    legend.justification = c("right", "bottom"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text  = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
+
+```
+
+We can see that problems loading photos are specially present in slow resolution complaints of incorrect item issues, while these type of problems rarely appear in other type of issues. 
+
+It also looks like the difference across conditions in the presence of slow resolution complaints is proportional to the difference across conditions to in the mention of problems loading photos. We can see this better in a graph that superpose the proportions. 
+
+
+
+
+
+
+
 
 SEGUIR ADAPTANDO EL CÓDIGO: 
 - Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, para ponerlo con y sin CI
