@@ -961,10 +961,10 @@ In order to disentangle whether the larger number of slow resolution complaints 
 ```{r}
 # Create a factor that integrates presence of slow resolution complaints and mentions to photo issues
 data.ch.i$sp.solve.complain.problem <- NA_character_
-data.ch.i$sp.solve.complain.problem [data.ch.i$no.complain.sp.solve == 1] <- "No slow resolution complaint"
+data.ch.i$sp.solve.complain.problem [data.ch.i$no.complain.sp.solve == 1] <- "No slow resolution problems"
 data.ch.i$sp.solve.complain.problem [data.ch.i$problem.photo == 1] <- "Chat not loading photos"
 data.ch.i$sp.solve.complain.problem [!data.ch.i$no.complain.sp.solve == 1 & !data.ch.i$problem.photo == 1] <- "Other problems"
-data.ch.i$sp.solve.complain.problem  <- factor (data.ch.i$sp.solve.complain.problem, levels = c("No slow resolution complaint","Chat not loading photos", "Other problems"))
+data.ch.i$sp.solve.complain.problem  <- factor (data.ch.i$sp.solve.complain.problem, levels = c("No slow resolution problems","Chat not loading photos", "Other problems"))
 
 
 #Check if the recodification worked as expected
@@ -1048,7 +1048,7 @@ Finally, we can plot the results in a bar graph with bars stacked by proportions
 ```{r}
 
 #Specify the order of the dv variable levels in the new dataframe
-complaints.problems.df$dv.level  <- factor (complaints.problems.df$dv.level, levels = c("No slow resolution complaint","Chat not loading photos", "Other problems"))
+complaints.problems.df$dv.level  <- factor (complaints.problems.df$dv.level, levels = c("No slow resolution problems","Chat not loading photos", "Other problems"))
 
 
 
@@ -1060,7 +1060,7 @@ ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level))
   labs(x = "Condition",
        y = "% of Cases",
        fill = "Problem type",
-       title = "Share of Photo Problems in Slow Resolution Complaints") +
+       title = "Problems in Slow Resolution Complaints") +
   
   # Rename the conditions
   scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
@@ -1068,7 +1068,7 @@ ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level))
   
   # Introduce colors of the stacked bars
   scale_fill_manual(values = c(
-    "No slow resolution complaint" = "grey95",      
+    "No slow resolution problems" = "grey98",      
     "Chat not loading photos" = "antiquewhite3", 
     "Other problems" = "antiquewhite1"
   )) +
@@ -1088,9 +1088,96 @@ This difference made sense from the theoretical point of view of stakeholders, b
 
 We further check if the differences in the presence of the problems are statistically significant, using a logistic models.
 
+### 5.3.3. Testing Significance of Differences Across Conditions in Slow Resolution Problems
+
+To confirm that the differences in condition are only drived by photo issues in the chat, we conduct chi-square tests. 
+We use chi-square tests instead of logistic regression because chi-square tests are robust to having some of the categories with 0 cases, as it happens for example for our category of photo problems in other issues. 
+
+
+```{r}
 
 
 
+
+f.chisq.tests <- function(my.dv.list, my.factor, my.data){
+  
+  #Create an empty list of results and a marker for indexing the results
+  results <- list()
+  p <- 1
+  
+  # Create a loop for each variable
+  for (dv in my.dv.list){
+    
+    #Obtain the current table of analysis
+    current.table <- table(my.data[[dv]], my.data[[my.factor]])
+    
+    #Calculate chi square test and save results
+    chi_square_test <- chisq.test (current.table)
+    chi_value <- chi_square_test$statistic
+    chi_df <- chi_square_test$parameter
+    chi_p <- chi_square_test$p.value
+    expected <- chi_square_test$expected
+    low.count <- any(expected < 5)
+    
+    # Calculate Fisher test and save results
+    fisher_test <- fisher.test(current.table)
+    fisher_p <- fisher_test$p.value
+    if (all(dim(current.table) == 2)) {
+     fisher_odds_ratio <- fisher_test$estimate
+     fisher_odds_ratio_lower <- fisher_test$conf.int[1]
+     fisher_odds_ratio_upper <- fisher_test$conf.int[2]
+        } else {
+        fisher_odds_ratio <- NA
+        fisher_odds_ratio_lower <- NA
+        fisher_odds_ratio_upper <- NA
+}
+
+    
+    # Save the results
+    results[[p]] <- data.frame(dep.variable = dv, factor = my.factor, p.chi.square = chi_p, cells_below_5 = low.count, value.chi.square = chi_value, chi.square.df = chi_df, fisher.p = fisher_p, odds.ratio = fisher_odds_ratio, ci.lower.fisher.odds.ratio = fisher_odds_ratio_lower, ci.upper.fisher.odds.ratio = fisher_odds_ratio_upper, stringsAsFactors = FALSE)
+    p <- p + 1
+    
+  } # Close the loop for the dv
+  
+# Put together the results
+results.df <- do.call(rbind, results)
+rownames(results.df) <- NULL
+
+#Return the dataframe
+return(results.df)
+}
+
+```
+
+And we apply the formula 
+
+```{r}
+dv.variables <- c("problem.photo", "problem.info", "problem.deadline", "problem.unspecified")
+chi.sq.df <-f.chisq.tests (dv.variables, "condition", data.ch.i)
+chi.sq.df
+
+```
+
+
+
+
+
+
+```{r}
+# Problems loading photos in the chat: 
+table.photo <- with(data.ch.i, table(problem.photo, condition))
+table.photo
+chisq.test(table.photo)
+
+# Problems checking information: 
+table.info <- with(data.ch.i, table(problem.info, condition))
+table.info
+chi <- chisq.test(table.info)
+fisher <- fisher.test(table.info)
+chi
+fisher
+
+```
 
 
 SEGUIR ADAPTANDO EL CÓDIGO: 
