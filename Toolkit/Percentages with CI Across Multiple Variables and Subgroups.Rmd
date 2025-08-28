@@ -1,12 +1,49 @@
+
 ---
 title: "Percentages with CI across Multiple Variables and Subgroups"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
+    css: my_style.css
+  html_notebook:
+    css: my_style.css
+  pdf_document: default
 ---
+  
 
 
-# 1. Functions
 
-## Percentages & CI for a List of Dichotomous DVs and 2 Grouping Factors
+# Setup
+
+We start by loading the required packages for data manipulation and visualization. 
+
+```{r}
+
+# Data handling
+library(readxl)      # Read Excel files
+library(openxlsx)    # Write Excel files
+library(dplyr)       # Data manipulation
+
+
+# Visualization
+library(ggplot2)     # General plotting
+
+```
+
+We also load the databases used as examples: 
+
+```{r}
+data <- read.xlsx("Predicting Detractors 1.data.xlsx")
+data.ch.i <- read.xlsx("Predicting Detractors 2. data.ch.i.xlsx")
+
+```
+
+
+# 1. Dichotomous DV Variables
+
+## 1.1. Working with a list of Dichotomous DV variables and 2 Grouping Factors
+
+### 1.1.1. Reusable Function to Obtain a Dataframe with Descriptives
 
 * Expected Outcome: a dataframe with columns for percentages and 95% CI limits for all dvs and subgroups specified
 
@@ -16,6 +53,7 @@ output: html_notebook
   * The names of the factors used for the subgroups (my.factor1, my.factor2), as character strings. 
 
 ```{r}
+
 f.prop.2f <- function(my.data, my.dv.list, my.factor1, my.factor2){
   
   # Initialize an empty list to store the sampled subsets from each stratum.
@@ -67,21 +105,29 @@ f.prop.2f <- function(my.data, my.dv.list, my.factor1, my.factor2){
   #Return the dataframe
   return(results.df)
 }
+
 ```
 
 * Example of Usage: 
 
 ```{r}
-prop.df <- f.prop.2f (my.data = data.complaints , my.dv.list = dv.variables, my.factor1 = "method", my.factor2 = "reason.grouped")
+
+#Indicate the dependent variables  in a vector
+dv.variables <- c("complain.connect", "complain.sp.respond",  "complain.sp.solve", "complain.repeat", "complain.other")
+
+# Apply the function
+prop.df <- f.prop.2f (my.data = data.ch.i , my.dv.list = dv.variables, my.factor1 = "condition", my.factor2 = "country")
+
+prop.df
 
 ```
 
+
+### 1.1.2. Graphing the Results
+
 We can use a bar graph to depict the results, e.g.: 
 
-
-
 ```{r}
-
 # Setting the order of the complaints variables
 prop.df$dep.variable <- factor(prop.df$dep.variable, levels = c("complain.connect", "complain.repeat", "complain.sp.respond", "complain.sp.solve", "complain.other"))
 
@@ -132,5 +178,132 @@ ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
     axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
     plot.margin = margin(10, 5, 10, 5)
   )
+
+```
+
+
+
+# 2. Multicategorical Variables
+
+## 2.1. A Multicategorical DV across 1 grouping factor
+
+### 2.1.1. Reusable Function
+
+* Expected Outcome: a dataframe with columns for percentages and 95% CI limits for all dv levels in each factor subgroup
+
+* Input: 
+  * The original dataframe (my.data).
+  * The name of the multicategorical dv (my.dv), as character string. 
+  * The names of the factor used for the subgroups (my.factor), as character string.
+
+
+```{r}
+f.prop.multicategory.1f <- function(my.data, my.dv, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the dependent variable and the factor
+  dv.levels <- unique (my.data[[my.dv]])
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each factor level
+    for (fl in f.levels){
+      
+    #Extract the vector and clean for missing cases
+    current.vector <- my.data[my.data[[my.factor]]== fl, my.dv]
+    current.vector.c <- current.vector[!is.na(current.vector)] #cleaning missing cases
+      
+      #Create a loop for each dv level  
+      for (dvl in dv.levels){
+          
+      # Extract the successes and number of cases
+      n <- length(current.vector.c) # number of cases in the vector
+      s <- length(current.vector.c[current.vector.c == dvl]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(factor = fl, dv.level = dvl, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+
+      } # close the loop for the dv levels
+    } # close the loop for the factor levels
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+
+```
+
+
+Example of application from the project "Predicting Customers Detractors (2)": 
+
+```{r}
+complaints.problems.df <- f.prop.multicategory.1f(data.ch.i, "sp.solve.complain.problem", "condition")
+complaints.problems.df
+
+```
+
+
+### 2.1.2. Graphing the Results
+
+Example of a graph from "Predicting Customers Detractors (2)". 
+
+```{r}
+
+#Specify the order of the dv variable levels in the new dataframe
+complaints.problems.df$dv.level  <- factor (complaints.problems.df$dv.level, levels = c("No slow resolution problems","Chat not loading photos", "Other problems"))
+
+
+
+# Graph with stacked bars
+ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
+  geom_col(position = "stack", width = 0.6) +
+
+  # Specify titles and labels
+  labs(x = "Condition",
+       y = "% of Cases",
+       fill = "Problem type",
+       title = "Problems in Slow Resolution Complaints") +
+  
+  # Rename the conditions
+  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
+                              "chat_other_issues" = "Other issue")) +
+  
+  # Introduce colors of the stacked bars
+  scale_fill_manual(values = c(
+    "No slow resolution problems" = "grey98",      
+    "Chat not loading photos" = "antiquewhite3", 
+    "Other problems" = "antiquewhite1"
+  )) +
+    # Add the data labels (if they are not too crowded)
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), # add the data label with 1 decimal
+            position = position_stack(vjust = 0.5), # Centers the label in the vertical axis
+            color = "black", # color of the data leabel text
+            size = 3) + # size of the data label text
+  
+  theme_minimal(base_size = 14)
+
 ```
 
