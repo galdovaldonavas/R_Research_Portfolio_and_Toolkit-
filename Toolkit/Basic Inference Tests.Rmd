@@ -1,0 +1,114 @@
+---
+title: "Basic Inference Tests"
+output:
+  html_document:
+    df_print: paged
+    css: my_style.css
+  html_notebook:
+    css: my_style.css
+  pdf_document: default
+---
+
+
+# Setup
+
+We start by loading the required packages for data manipulation and visualization. 
+
+```{r}
+
+# Data handling
+library(readxl)      # Read Excel files
+library(openxlsx)    # Write Excel files
+library(dplyr)       # Data manipulation
+
+
+# Visualization
+library(ggplot2)     # General plotting
+
+```
+
+We also load the databases used as examples: 
+
+```{r}
+data <- read.xlsx("Predicting Detractors 1.data.xlsx")
+data.ch.i <- read.xlsx("Predicting Detractors 2. data.ch.i.xlsx")
+
+```
+
+
+# Relations Between 2 Categorical Variables
+
+## Function for Chi-Squared & Fisher Tests for Several Dependent Variables
+
+* Expected Outcome: a dataframe with values for *chi-square tests* and *Fisher tests* for *each dependent variable* in relation to a specified factor. It also includes a variable to indicate whether in the chi-square test there are *expected cell below 5 cases*, which are situations in which the results of the Fisher test are more robust. 
+
+* Input: 
+  * A list of categorical dependent variable (my.dv.list), saved priorly in a vector as character strings. 
+  * The original dataframe (my.data).
+  * The names of the factor used for thecomparison (my.factor), as character strings.
+  
+```{r}
+# The reusable function: 
+f.chisq.tests <- function(my.dv.list, my.factor, my.data){
+  
+  #Create an empty list of results and a marker for indexing the results
+  results <- list()
+  p <- 1
+  
+  # Create a loop for each variable
+  for (dv in my.dv.list){
+    
+    #Obtain the current table of analysis
+    current.table <- table(my.data[[dv]], my.data[[my.factor]])
+    
+    #Calculate chi square test and save results
+    chi_square_test <- chisq.test (current.table)
+    chi_value <- chi_square_test$statistic
+    chi_df <- chi_square_test$parameter
+    chi_p <- chi_square_test$p.value
+    expected <- chi_square_test$expected
+    low.count <- any(expected < 5)
+    
+    # Calculate Fisher test and save results
+    fisher_test <- fisher.test(current.table)
+    fisher_p <- fisher_test$p.value
+    if (all(dim(current.table) == 2)) {
+     fisher_odds_ratio <- fisher_test$estimate
+     fisher_odds_ratio_lower <- fisher_test$conf.int[1]
+     fisher_odds_ratio_upper <- fisher_test$conf.int[2]
+        } else {
+        fisher_odds_ratio <- NA
+        fisher_odds_ratio_lower <- NA
+        fisher_odds_ratio_upper <- NA
+}
+
+    
+    # Save the results
+    results[[p]] <- data.frame(dep.variable = dv, factor = my.factor, p.chi.square = chi_p, cells_below_5 = low.count, value.chi.square = chi_value, chi.square.df = chi_df, fisher.p = fisher_p, odds.ratio = fisher_odds_ratio, ci.lower.fisher.odds.ratio = fisher_odds_ratio_lower, ci.upper.fisher.odds.ratio = fisher_odds_ratio_upper, stringsAsFactors = FALSE)
+    p <- p + 1
+    
+  } # Close the loop for the dv
+  
+# Put together the results
+results.df <- do.call(rbind, results)
+rownames(results.df) <- NULL
+
+#Return the dataframe
+return(results.df)
+}
+
+```
+
+
+Example of application from the project "Predicting Customers Detractors (2)": 
+
+```{r}
+#List of dependent variables about slow resolution problems
+dv.variables <- c("problem.photo", "problem.info", "problem.deadline", "problem.unspecified")
+
+#Application of the function to the list
+chi.sq.df <-f.chisq.tests (dv.variables, "condition", data.ch.i)
+chi.sq.df
+
+```
+

@@ -36,6 +36,7 @@ We start by loading the required packages for data manipulation, visualization, 
 ```{r}
 # Data handling
 library(dplyr)       # Data manipulation
+library(openxlsx)    # Write Excel files
 
 # Visualization
 library(ggplot2)     # General plotting
@@ -1161,33 +1162,23 @@ chi.sq.df
 
 
 
+SEGUIR ADAPTANDO EL CÓDIGO: 
+
+- Reescribir: 
+- Modelar el impacto de las distintas quejas. (o si quiero solo de una - la que haya marcado diferencias). Ver si factor de condición deja de ser significativo (aunque quiza da problemas de colinealidad)
+- Calcular el impacto total. 
+- Recoger distintos gráficos en el Tookit. - Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, grafico con y sin CI
 
 
+Save the database
+ 
 ```{r}
-# Problems loading photos in the chat: 
-table.photo <- with(data.ch.i, table(problem.photo, condition))
-table.photo
-chisq.test(table.photo)
 
-# Problems checking information: 
-table.info <- with(data.ch.i, table(problem.info, condition))
-table.info
-chi <- chisq.test(table.info)
-fisher <- fisher.test(table.info)
-chi
-fisher
+write.xlsx(data.ch.i, "Predicting Detractors 2. data.ch.i.xlsx")
+write.xlsx(data.complaints, "Predicting Detractors 2. data.complaints.xlsx")
+
 
 ```
-
-
-SEGUIR ADAPTANDO EL CÓDIGO: 
-- Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, para ponerlo con y sin CI
-- Reescribir: 
-  - ver si hay diferencias con chi cuadrados/modelos logísticos entre las condiciones. utilizar una fórmula de agrupación, como by
-- Modelar el impacto de las distintas quejas. (o si quiero solo de una - la que haya marcado diferencias)
-- Recoger distintos gráficos en el Tookit
-
- 
  
 
 
