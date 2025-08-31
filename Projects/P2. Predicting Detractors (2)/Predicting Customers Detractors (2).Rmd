@@ -874,8 +874,9 @@ with(data.ch.i, table(problem.unspecified, condition))
 
 # 5.3.2. Exploratory Analyses of Specific Problems
 
-To see the percentage of problems across our conditions, we apply our function (see section x)
+To explore how specific problems were distributed across conditions, we calculated the percentage of cases mentioning each type of problem. For comparability, we also calculated the percentage of absence of slow resolution complaints. 
 
+All these percentages were obtained with the reusable function specified in Section X.
 
 ```{r}
 
@@ -955,15 +956,14 @@ ggplot(prob.prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
 
 ```
 
-
-The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues. 
+The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues.
 
 Further plotting can help us visualize the extent to which the presence of slow resolution complaints is proportional to the difference across conditions to in the mention of problems loading photos. 
 
 
 ### 5.3.2.1 Exploring the Correspondence of Additional Complaints and Specific Problems
 
-In order to disentangle whether the larger number of slow resolution complaints in incorrect item cases is mainly driven by photo upload problems, we create a multicategorical variable that integrates the presence of complaints, the complaints mentioning problems loading photos, and complaints mentioning other problems. 
+In order to disentangle whether the larger number of slow resolution complaints in incorrect item cases is mainly driven by photo upload problems, we create a multicategorical variable that integrates the presence of complaints, the complaints mentioning problems loading photos (which may include other problems), and complaints mentioning only other problems. 
 
 ```{r}
 # Create a factor that integrates presence of slow resolution complaints and mentions to photo issues
@@ -1185,16 +1185,20 @@ To allow comparability with prior analyses, we use the presence of NPS detractor
 m.problems.sp.solve <- glm (detractor ~ condition + problem.photo, data = data.ch.i, family = "binomial")
 summary(m.problems.sp.solve)
 
+
+
 ```
 
 We can see that the problem loading photos significantly predicts that customers become detractors, to the point that after accounting for it, the differences between incorrect item cases and other cases are no longer significant. 
 
-To make our model cleaner, we test whether the model can be simplified by removing this non-significant variable. 
+Since parsimony is generally preferred when non-significant predictors do not add explanatory power, we test a reduced model including only the significant predictor
 
 ```{r}
 
 m.problems.sp.solve2 <- glm (detractor ~ problem.photo, data = data.ch.i, family = "binomial")
 summary(m.problems.sp.solve2)
+
+anova(m.problems.sp.solve, m.problems.sp.solve2, test = "Chisq")
 
 ```
 
@@ -1206,7 +1210,7 @@ We are now ready to derive meaningful metrics from the model to understand the e
 
 To interpret the results of our binomial logistic regression, we use reusable codes from our toolkit that will help us calculate the predicted percentage of detractors when the loading problem is present and not, the differences in these predicted percentages, the relative probabilities (risk ratios), and the odds ratios.
 
-We first need to build a design matrix that represents the isolated presence of each factor (and the intercept). 
+We first need to build a design matrix that represents the isolated presence of each factor (and the intercept). Each row in the design matrix represents a scenario where one factor is present and all others are set to zero, allowing us to isolate the effect of each variable.  
 
 
 
@@ -1233,6 +1237,8 @@ str(data.ch.i)
 
 
 ```
+
+The structure of the variables in the matrix aligns with the structure of the variables in the dataset. 
 
 We then apply the matrix and our database to the function to compute the metrics and their 95% confidence intervals from logistic models. Please note that this function has been specified in section x, so we do not need to specify it here again.
 
@@ -1268,7 +1274,7 @@ ggplot(m.problems.sp.solve2.metrics.df, aes(x = Prediction,
     geom_text(aes(label = paste(round(Prediction,1), "%")), 
             vjust = -1, size = 3.5) + 
   labs(
-    title = "Expected Detractors in Chat Cases By Key Problems",
+    title = "Expected Detractors by Problems Loading Photos in the Chat",
     x = "% of Detractors", 
     y = "Stated Problems"
   ) +
@@ -1277,8 +1283,9 @@ ggplot(m.problems.sp.solve2.metrics.df, aes(x = Prediction,
 
 ```
 
-We can see that problems uploading photos have a great impact in the probability to recommend. When these problems are present, mostly all users are expected to be detractors. In contrast, the percentage of chat detractors when this problem is only about half of the users.  
+The points represent the predicted percentages of detractors for each scenario, with horizontal whiskers showing the 95% confidence intervals.
 
+We can see that problems uploading photos have a strong impact on the likelihood of being a detractor. When these problems are present, nearly all users are expected to become detractors. In contrast, in the absence of this problem, only about half of the users are predicted to be detractors.
 
 ## 5.5. Impact of Problems Loading Photos Across All Users
 
@@ -1291,6 +1298,8 @@ To understand what is the impact that this photo issue is having on the total de
 
 
 * Estimación de % of detractors en incorrect item issues y otros casos si el problema no estuviera presente: 44.7% en ambos, si, pero de cuánto a cuánto se reduce en cada condición. 
+
+Creo que la solución va a ser simular x casos con la probabilidad de que el problema esté presente (obtenido dle modelo de presencia y su CI), y x casos la diferencia porcentual del efecto (con sus CI). Estos valores se multiplicarán uno por el otro. De esta manera tendremos los intervalos de confianza
 
 
 
