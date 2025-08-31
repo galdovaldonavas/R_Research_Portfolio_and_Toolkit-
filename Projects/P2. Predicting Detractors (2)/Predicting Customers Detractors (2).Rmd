@@ -208,6 +208,12 @@ data$nps.segment[data$nps.score >= 9] <- "promoter" # Assign segment based on sc
 
 data$nps.segment <- factor(data$nps.segment, levels = c("detractor", "passive", "promoter")) # Convert to factor
 
+## Create a binary variable for detractors
+data$detractor <- NA_real_
+data$detractor[data$nps.segment == "detractor"] <- 1
+data$detractor[data$nps.segment != "detractor"] <- 0
+
+
 # Step 4: Check distribution across NPS segments
 with(data, prop.table(table(nps.segment)))
 
@@ -1083,7 +1089,7 @@ ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level))
 
 
 ```
-We can see that the difference in complaints is mainly associated to the difference in the presence of problems loading photos for the incorrect item cases. 
+We can see that the difference in complaints is mainly explained by the difference in the presence of problems loading photos for the incorrect item cases. 
 
 This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items, while this photo requirement is rare in other cases. 
 
@@ -1091,15 +1097,16 @@ We further check if the differences in the presence of the problems are statisti
 
 ### 5.3.3. Testing Significance of Differences Across Conditions in Slow Resolution Problems
 
-To confirm that the differences in condition are only drived by photo issues in the chat, we conduct chi-square tests. 
+To confirm that the difference in the problems loading the photo between the two conditions was statistically significant, and that there were not other significant differences across conditions, we conduct chi-square tests. 
+
 We use chi-square tests instead of logistic regression because chi-square tests are robust to having some of the categories with 0 cases, as it happens for example for our category of photo problems in other issues. 
+
+To perform chi-squares tools, we use a reusable function from my toolkit. We first specify this function. 
 
 
 ```{r}
 
-
-
-
+# The reusable function: 
 f.chisq.tests <- function(my.dv.list, my.factor, my.data){
   
   #Create an empty list of results and a marker for indexing the results
@@ -1150,23 +1157,151 @@ return(results.df)
 
 ```
 
-And we apply the formula 
+Then we apply the function to our list of problem variables. 
 
 ```{r}
+#List of dependent variables about slow resolution problems
 dv.variables <- c("problem.photo", "problem.info", "problem.deadline", "problem.unspecified")
+
+#Application of the function to the list
 chi.sq.df <-f.chisq.tests (dv.variables, "condition", data.ch.i)
 chi.sq.df
 
 ```
+The chi-square tests confirm that problems uploading photos in the chat are significantly more frequent in cases experiencing incorrect item issues, versus other cases, and that this is the only significant difference we observe.
+
+Now it is time to evaluate the impact of this problem in the likelihood to recommend our service. 
+
+
+## 5.4. Association of Problems Loading Photos and Likelihood to Recommend
+
+To evaluate the impact on the likelihood to recommend that is associated to specific cases that experience problems loading photos in the chat, we specify regression  model to predict it from the presence of the problems and the type of issues condition (which was also significant in prior analyses). 
+
+To allow comparability with prior analyses, we use the presence of NPS detractors as our indicator of the likelihood to recommend. 
+
+```{r}
+# Specify the model
+
+m.problems.sp.solve <- glm (detractor ~ condition + problem.photo, data = data.ch.i, family = "binomial")
+summary(m.problems.sp.solve)
+
+```
+
+We can see that the problem loading photos significantly predicts that customers become detractors, to the point that after accounting for it, the differences between incorrect item cases and other cases are no longer significant. 
+
+To make our model cleaner, we test whether the model can be simplified by removing this non-significant variable. 
+
+```{r}
+
+m.problems.sp.solve2 <- glm (detractor ~ problem.photo, data = data.ch.i, family = "binomial")
+summary(m.problems.sp.solve2)
+
+```
+
+The likelihood ratio test confirms that removing the condition variable does not significantly reduce model fit. Therefore, we simplify the model by excluding it.
+
+We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of detractors is associated with loading photo problems.
+
+### 5.3.1. Creating Metrics to Interpret the Model
+
+To interpret the results of our binomial logistic regression, we use reusable codes from our toolkit that will help us calculate the predicted percentage of detractors when the loading problem is present and not, the differences in these predicted percentages, the relative probabilities (risk ratios), and the odds ratios.
+
+We first need to build a design matrix that represents the isolated presence of each factor (and the intercept). 
+
+
+
+```{r}
+#####
+# Design Matrix for Predictions
+#####
+
+# Extract the factor names from the model, with and without the intercept--- editions needed 
+f.names.interc <- names(coef(m.problems.sp.solve2)) #specify the new model here
+f.names <- f.names.interc[-1]
+
+# Create a matrix with 1s on the diagonal (each case represents one factor set to 1) --- no editions needed
+my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
+my.matrix.df[, 1] <- f.names.interc
+names(my.matrix.df) <- c("case", f.names)
+
+# Quick check of the structure --- no editions needed
+str(my.matrix.df)
+my.matrix.df
+
+# We check that the factor in the matrix is specified in a similar way than in our database
+str(data.ch.i)
+
+
+```
+
+We then apply the matrix and our database to the function to compute the metrics and their 95% confidence intervals from logistic models. Please note that this function has been specified in section x, so we do not need to specify it here again.
+
+
+```{r}
+
+# Apply the function to the final binomial model
+m.problems.sp.solve2.metrics.df <- f.metrics.binomial(m.problems.sp.solve2, my.matrix.df)
+
+# Display the resulting metrics
+m.problems.sp.solve2.metrics.df
+
+```
+
+
+Lastly, we visually represent the predicted proportions of detractors to clearly identify the extent to which the photo problems are associated with higher likelihoods of detractor status.
+
+```{r}
+# Add descriptive labels for each factor
+m.problems.sp.solve2.metrics.df$Label <- NA_character_
+m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "(Intercept)"] <- 
+  "No Photo Problems"
+m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "problem.photo"] <- 
+  "Problems Loading Photos"
+
+
+# Create the dot-and-whisker plot for the predictions
+ggplot(m.problems.sp.solve2.metrics.df, aes(x = Prediction, 
+                    y = reorder(Label, Prediction))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
+  geom_errorbarh(aes(xmin = Lower_Prediction, xmax = Upper_Prediction), height = 0.2) +
+  geom_point(size = 3) +
+    geom_text(aes(label = paste(round(Prediction,1), "%")), 
+            vjust = -1, size = 3.5) + 
+  labs(
+    title = "Expected Detractors in Chat Cases By Key Problems",
+    x = "% of Detractors", 
+    y = "Stated Problems"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
+
+We can see that problems uploading photos have a great impact in the probability to recommend. When these problems are present, mostly all users are expected to be detractors. In contrast, the percentage of chat detractors when this problem is only about half of the users.  
+
+
+## 5.5. Impact of Problems Loading Photos Across All Users
+
+To understand what is the impact that this photo issue is having on the total detractors we have in customer service, we have to consider two pieces of information: 
+- Estimates of the extent to which this problem is present.
+- The estimated relation between the presence of this problem and probability to become detractors (seen in the prior section)
+-  
+
+
+
+
+* Estimación de % of detractors en incorrect item issues y otros casos si el problema no estuviera presente: 44.7% en ambos, si, pero de cuánto a cuánto se reduce en cada condición. 
+
+
+
 
 
 
 
 SEGUIR ADAPTANDO EL CÓDIGO: 
 
-- Reescribir: 
-- Modelar el impacto de las distintas quejas. (o si quiero solo de una - la que haya marcado diferencias). Ver si factor de condición deja de ser significativo (aunque quiza da problemas de colinealidad)
 - Calcular el impacto total. 
+- Seguimiento temporal. 
 - Recoger distintos gráficos en el Tookit. - Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, grafico con y sin CI
 
 
