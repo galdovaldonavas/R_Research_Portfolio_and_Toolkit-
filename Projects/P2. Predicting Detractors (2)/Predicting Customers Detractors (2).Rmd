@@ -40,10 +40,14 @@ library(openxlsx)    # Write Excel files
 
 # Visualization
 library(ggplot2)     # General plotting
+library(vcd)         # Mosaic plots
 
 # Statistical analysis
 library(psych)       # Descriptive statistics
 library(car)         # VIF and regression diagnostics
+library(glmnet)      # Penalized logistic regression
+library(boot)        # Bootstrapping
+
 ```
 
 
@@ -313,7 +317,7 @@ Using the code below, we take a random sample for each of the comparison conditi
 ```{r}
 
 # Specify the sample sizes for both samples
-sample.n <- 200
+sample.n <- 300
 
 # Sample 1: Cases of chat attending incorrect items
 subset_chat_incorrect<- data[data$reason == "incorrect_item" & data$method == "chat", ]
@@ -1168,26 +1172,183 @@ chi.sq.df <-f.chisq.tests (dv.variables, "condition", data.ch.i)
 chi.sq.df
 
 ```
-The chi-square tests confirm that problems uploading photos in the chat are significantly more frequent in cases experiencing incorrect item issues, versus other cases, and that this is the only significant difference we observe.
+The chi-square tests confirm that problems uploading photos in the chat are significantly more frequent in cases experiencing incorrect item issues, versus other cases, and that this is the only significant difference we observe. (problem.info does not pass the Bonferroni Threshold)
 
 Now it is time to evaluate the impact of this problem in the likelihood to recommend our service. 
 
 
-## 5.4. Association of Problems Loading Photos and Likelihood to Recommend
+## 5.4. Modeling
 
-To evaluate the impact on the likelihood to recommend that is associated to specific cases that experience problems loading photos in the chat, we specify regression  model to predict it from the presence of the problems and the type of issues condition (which was also significant in prior analyses). 
+To evaluate the impact of the problems on the likelihood to recommend we will use logistic binomial regression. 
 
 To allow comparability with prior analyses, we use the presence of NPS detractors as our indicator of the likelihood to recommend. 
+
+
+### 5.4.1. Preliminary Exploration of Interactions and Collinearity Issues
+
+
+We conduct a mosaic plot with all the considered predictors to identify collinearity issues and interactions. Since we have many predictors, we do it in several phases:
+
+```{r}
+## Checking interactions between problems, countries and conditions
+# Problems Loading Photos
+table.photos <- with (data.ch.i, table(problem.photo, condition, country, detractor))
+table.photos
+doubledecker(table.photos)
+
+# Problems of slow information check
+table.info <- with (data.ch.i, table(problem.info, condition, country, detractor))
+table.info
+doubledecker(table.info)
+
+# Problems of failing the deadline
+table.deadline <- with (data.ch.i, table(problem.deadline, condition, country, detractor))
+table.deadline
+doubledecker(table.deadline)
+
+## Checking interactions between problems
+table.problems <- with (data.ch.i, table(problem.photo, problem.info, problem.deadline, detractor))
+table.problems
+doubledecker(table.problems)
+
+
+```
+We cannot identify relevant interactions between the factors used to predict detractors. Across different conditions and countries, the presence of each of the problems was generally associated with mostly all users being detractors. Also, this ceiling effect makes it difficult to clearly observe whether the effects of the different problems interact with each other.
+
+We also do not identify any problems of collinearity. None of the factors show an extreme relation with any of the other factors.
+
+However, one of the issues we have is that the factor for deadline problems presents a complete separation of scores in relation to the detractors, with all cases who present the problem being detractors. This complete separation is a major challenge for a standard logistic regression model, because the algorithm's attempt to perfectly fit the data will cause the coefficient for this factor to tend towards infinity. Let's fit a standard model to see this issue: 
+
 
 ```{r}
 # Specify the model
 
-m.problems.sp.solve <- glm (detractor ~ condition + problem.photo, data = data.ch.i, family = "binomial")
-summary(m.problems.sp.solve)
+trial.m.problems.sp.solve <- glm (detractor ~ problem.photo + problem.info + problem.deadline + country + condition, data = data.ch.i, family = "binomial")
+summary(trial.m.problems.sp.solve)
+
+```
+
+As expectedd, we can see a very large standard error and a non-significant p-value for deadline problems, even though the factor's effect is clearly substantial.
+
+To address this, we will use a penalized logistic regression, which is robust to this issue. 
+
+### 5.4.2. Penalized Logistic Regression Model
+
+A penalized logistic regression model, specifically with a **Lasso penalty**, is used to obtain a stable and meaningful set of coefficients that can be used for reliable probability predictions. This method adds a regularization term that prevents the coefficients from becoming infinitely large, allowing for a well-defined and convergent solution.
+
+Let's implement this robust method using the glmnet package in R.
+
+```{r}
 
 
 
 ```
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+# Prepare the predictors in a matrix
+x_predictors <- model.matrix(detractor ~ problem.photo + problem.info + problem.deadline + condition + country, data = data.ch.i)[,-1]
+
+# Prepare the response variable in a vector.
+y_detractor <- as.numeric(data.ch.i$detractor)
+
+# Specify and fit a Lasso model using cross-validation.
+# We use alpha = 1 for a Lasso penalty, which is effective for variable selection.
+m.problems.sp.solve <- cv.glmnet(x_predictors, y_detractor, family = "binomial", alpha = 1)
+
+# Inspect the coefficients for the optimal model.
+# We retrieve the coefficients at the lambda value that minimizes cross-validation error.
+coefficients <- coef(m.problems.sp.solve, s = "lambda.min")
+
+# Print the resulting coefficients to the console.
+print(coefficients)
+
+
+```
+
+```{r}
+
+
+# --- Step 1: Prepare the data
+
+# Prepare the predictors in a matrix
+x_predictors <- model.matrix(detractor ~ problem.photo + problem.info + problem.deadline + condition + country, data = data.ch.i)[,-1]
+# Prepare the dv in a vector
+y_detractor <- as.numeric(data.ch.i$detractor)
+
+
+# --- Step 2: Define a function for the bootstrapping process
+
+# This function takes the data and a set of indices as input.
+# It then fits a glmnet model on that subset of data and returns the coefficients.
+fit_lasso_bootstrap <- function(data, indices) {
+  
+  # Sample the data using the provided indices
+  d <- data[indices, ]
+  
+  # Prepare the data for glmnet
+  x_boot <- model.matrix(detractor ~ problem.photo + problem.info + problem.deadline + condition + country, data = d)[,-1]
+  y_boot <- as.numeric(d$detractor)
+  
+  # Fit the Lasso model with cross-validation
+  cv_fit <- cv.glmnet(x_boot, y_boot, family = "binomial", alpha = 1)
+  
+  # Extract the coefficients from the optimal model
+  coefs <- as.vector(coef(cv_fit, s = "lambda.min"))
+  return(coefs)
+}
+
+# Step 3: Run the bootstrapping simulation
+# We will repeat the process 1000 times to get a robust distribution of coefficients.
+# Note: This step may take a few minutes to run.
+set.seed(123) 
+bootstrap_results <- boot(data = data.ch.i, statistic = fit_lasso_bootstrap, R = 1000)
+
+# Step 4: Extract and display the confidence intervals
+# We can use the 'boot.ci' function to calculate 95% confidence intervals for each coefficient.
+# The `index` parameter corresponds to the position of the coefficient in the vector returned by our function.
+
+# Let's check the order of our coefficients from the original model to know their indices.
+original_coefs <- coef(cv.glmnet(x_predictors, y_detractor, family = "binomial", alpha = 1), s = "lambda.min")
+print(original_coefs)
+
+# Example: Get the 95% CI for 'problem.deadline'.
+# Based on the output above, its index is likely 4 (after the intercept and the first two problems).
+# You may need to adjust this index based on your exact output.
+print(boot.ci(bootstrap_results, type = "perc", index = 4))
+
+# Example: Get the 95% CI for 'problem.photo'.
+# Its index is likely 2.
+print(boot.ci(bootstrap_results, type = "perc", index = 2))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 We can see that the problem loading photos significantly predicts that customers become detractors, to the point that after accounting for it, the differences between incorrect item cases and other cases are no longer significant. 
 
@@ -1325,8 +1486,107 @@ write.xlsx(data.complaints, "Predicting Detractors 2. data.complaints.xlsx")
 ```
  
 
+Se me ocurre: - Primero utilizar una simulación con bootstraping the x casos (e.g., 100000) donde simulemos la presencia del problema en cada subgrupo (i.e., en el subgrupo de chat incorrect items, y en el subgrupo de chat other issues). Para ello usaríamos el porcentaje de la presencia estimado y su CI. - Simular también el efecto asociado para cada uno de los casos anteriores, usando la estimación de la reducción de detractores y su CI. - Multiplicar para cada uno de los 10000 casos el efecto por la presencia, obteniendo de esta manera una distribución de nuestras estimaciones de la probabilidad de reducir detractores dentro de cada subgrupo (e.g., dentro de chat incorrect items). Así podemos obtener la reducción de detractores dentro de ese subgrupo y su intervalo de confianza. - Ponderar ese número por el porcentaje de casos que ese subgrupo representa en el total de casos de customer service, por ejemplo por .10 para chat incorrect item issues. 
 
-  
+
+
+```{r}
+set.seed(123) # para reproducibilidad
+
+#####
+# 1. Inputs: estimaciones conocidas
+#####
+
+# Presencia del problema de fotos (% y CI por subgrupo)
+# Ejemplo: 40% en incorrect items (CI 30–50%), 5% en other issues (CI 1–10%)
+p.incorrect.mean <- 0.40
+p.incorrect.low  <- 0.30
+p.incorrect.high <- 0.50
+
+p.other.mean <- 0.05
+p.other.low  <- 0.01
+p.other.high <- 0.10
+
+# Tamaño relativo de cada subgrupo en el total de casos
+w.incorrect <- 0.10  # 10% de los casos de CS
+w.other     <- 0.30  # 30% de los casos de CS
+
+# Efecto estimado sobre detractores (diferencia en probabilidad de ser detractor)
+# Ejemplo: +45pp (CI: +35 a +55)
+effect.mean <- 0.45
+effect.low  <- 0.35
+effect.high <- 0.55
+
+
+#####
+# 2. Preparar funciones auxiliares
+#####
+
+# Función para obtener parámetros de una Beta a partir de media e intervalo
+beta_params <- function(mean, low, high, conf = 0.95) {
+  # aproximación usando var ≈ ((upper-lower)/(2*1.96))^2
+  se <- (high - low) / (2 * qnorm(1 - (1 - conf)/2))
+  var <- se^2
+  alpha <- ((1 - mean) / var - 1 / mean) * mean^2
+  beta <- alpha * (1 / mean - 1)
+  return(list(alpha = alpha, beta = beta))
+}
+
+# Simulación con Beta
+sim_beta <- function(mean, low, high, n = 10000) {
+  pars <- beta_params(mean, low, high)
+  rbeta(n, pars$alpha, pars$beta)
+}
+
+# Simulación del efecto (diferencia de probabilidad), usando normal truncada en [0,1]
+sim_effect <- function(mean, low, high, n = 10000) {
+  se <- (high - low) / (2 * qnorm(0.975))
+  vals <- rnorm(n, mean, se)
+  vals[vals < 0] <- 0
+  vals[vals > 1] <- 1
+  return(vals)
+}
+
+
+#####
+# 3. Simulación Monte Carlo
+#####
+
+n.sim <- 10000
+
+# Presencia del problema en cada subgrupo
+p.incorrect <- sim_beta(p.incorrect.mean, p.incorrect.low, p.incorrect.high, n.sim)
+p.other     <- sim_beta(p.other.mean, p.other.low, p.other.high, n.sim)
+
+# Efecto en detractores
+effect <- sim_effect(effect.mean, effect.low, effect.high, n.sim)
+
+# Reducción esperada de detractores en cada subgrupo
+red.incorrect <- p.incorrect * effect
+red.other     <- p.other * effect
+
+# Reducción total ponderada
+red.total <- w.incorrect * red.incorrect + w.other * red.other
+
+
+#####
+# 4. Resultados resumidos
+#####
+
+summary_stats <- function(x) {
+  c(mean = mean(x),
+    low  = quantile(x, 0.025),
+    high = quantile(x, 0.975))
+}
+
+impact.incorrect <- summary_stats(red.incorrect)
+impact.other     <- summary_stats(red.other)
+impact.total     <- summary_stats(red.total)
+
+impact.incorrect
+impact.other
+impact.total
+```
 
   
 
