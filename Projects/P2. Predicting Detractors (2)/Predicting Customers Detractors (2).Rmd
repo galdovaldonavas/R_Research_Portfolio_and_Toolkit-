@@ -1217,157 +1217,41 @@ We cannot identify relevant interactions between the factors used to predict det
 
 We also do not identify any problems of collinearity. None of the factors show an extreme relation with any of the other factors.
 
-However, one of the issues we have is that the factor for deadline problems presents a complete separation of scores in relation to the detractors, with all cases who present the problem being detractors. This complete separation is a major challenge for a standard logistic regression model, because the algorithm's attempt to perfectly fit the data will cause the coefficient for this factor to tend towards infinity. Let's fit a standard model to see this issue: 
 
+### 5.4.2. Logistic Regression Model
 
 ```{r}
 # Specify the model
 
-trial.m.problems.sp.solve <- glm (detractor ~ problem.photo + problem.info + problem.deadline + country + condition, data = data.ch.i, family = "binomial")
-summary(trial.m.problems.sp.solve)
+m.problems.sp.solve <- glm (detractor ~ problem.photo + problem.info + problem.deadline + country + condition, data = data.ch.i, family = "binomial")
+summary(m.problems.sp.solve)
 
 ```
 
-As expectedd, we can see a very large standard error and a non-significant p-value for deadline problems, even though the factor's effect is clearly substantial.
+The model indicates that the presence of all the problems expected are associated with a significantly higher probability of users becoming detractors. 
 
-To address this, we will use a penalized logistic regression, which is robust to this issue. 
+In line with our exploratory analyses, the effect of condition is not longer significant to predict detractors once these specific problems are accounted for. Country is also a not significant factor. 
 
-### 5.4.2. Penalized Logistic Regression Model
-
-A penalized logistic regression model, specifically with a **Lasso penalty**, is used to obtain a stable and meaningful set of coefficients that can be used for reliable probability predictions. This method adds a regularization term that prevents the coefficients from becoming infinitely large, allowing for a well-defined and convergent solution.
-
-Let's implement this robust method using the glmnet package in R.
+To enhance the parsimony of our model, we check the exclusion of these non significant factors. 
 
 ```{r}
+# Specify the model
+m.problems.sp.solve2 <- glm (detractor ~ problem.photo + problem.info + problem.deadline, data = data.ch.i, family = "binomial")
 
-
-
-```
-
-
-
-
-
-
-
-
-
-
-```{r}
-
-# Prepare the predictors in a matrix
-x_predictors <- model.matrix(detractor ~ problem.photo + problem.info + problem.deadline + condition + country, data = data.ch.i)[,-1]
-
-# Prepare the response variable in a vector.
-y_detractor <- as.numeric(data.ch.i$detractor)
-
-# Specify and fit a Lasso model using cross-validation.
-# We use alpha = 1 for a Lasso penalty, which is effective for variable selection.
-m.problems.sp.solve <- cv.glmnet(x_predictors, y_detractor, family = "binomial", alpha = 1)
-
-# Inspect the coefficients for the optimal model.
-# We retrieve the coefficients at the lambda value that minimizes cross-validation error.
-coefficients <- coef(m.problems.sp.solve, s = "lambda.min")
-
-# Print the resulting coefficients to the console.
-print(coefficients)
-
-
-```
-
-```{r}
-
-
-# --- Step 1: Prepare the data
-
-# Prepare the predictors in a matrix
-x_predictors <- model.matrix(detractor ~ problem.photo + problem.info + problem.deadline + condition + country, data = data.ch.i)[,-1]
-# Prepare the dv in a vector
-y_detractor <- as.numeric(data.ch.i$detractor)
-
-
-# --- Step 2: Define a function for the bootstrapping process
-
-# This function takes the data and a set of indices as input.
-# It then fits a glmnet model on that subset of data and returns the coefficients.
-fit_lasso_bootstrap <- function(data, indices) {
-  
-  # Sample the data using the provided indices
-  d <- data[indices, ]
-  
-  # Prepare the data for glmnet
-  x_boot <- model.matrix(detractor ~ problem.photo + problem.info + problem.deadline + condition + country, data = d)[,-1]
-  y_boot <- as.numeric(d$detractor)
-  
-  # Fit the Lasso model with cross-validation
-  cv_fit <- cv.glmnet(x_boot, y_boot, family = "binomial", alpha = 1)
-  
-  # Extract the coefficients from the optimal model
-  coefs <- as.vector(coef(cv_fit, s = "lambda.min"))
-  return(coefs)
-}
-
-# Step 3: Run the bootstrapping simulation
-# We will repeat the process 1000 times to get a robust distribution of coefficients.
-# Note: This step may take a few minutes to run.
-set.seed(123) 
-bootstrap_results <- boot(data = data.ch.i, statistic = fit_lasso_bootstrap, R = 1000)
-
-# Step 4: Extract and display the confidence intervals
-# We can use the 'boot.ci' function to calculate 95% confidence intervals for each coefficient.
-# The `index` parameter corresponds to the position of the coefficient in the vector returned by our function.
-
-# Let's check the order of our coefficients from the original model to know their indices.
-original_coefs <- coef(cv.glmnet(x_predictors, y_detractor, family = "binomial", alpha = 1), s = "lambda.min")
-print(original_coefs)
-
-# Example: Get the 95% CI for 'problem.deadline'.
-# Based on the output above, its index is likely 4 (after the intercept and the first two problems).
-# You may need to adjust this index based on your exact output.
-print(boot.ci(bootstrap_results, type = "perc", index = 4))
-
-# Example: Get the 95% CI for 'problem.photo'.
-# Its index is likely 2.
-print(boot.ci(bootstrap_results, type = "perc", index = 2))
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-We can see that the problem loading photos significantly predicts that customers become detractors, to the point that after accounting for it, the differences between incorrect item cases and other cases are no longer significant. 
-
-Since parsimony is generally preferred when non-significant predictors do not add explanatory power, we test a reduced model including only the significant predictor
-
-```{r}
-
-m.problems.sp.solve2 <- glm (detractor ~ problem.photo, data = data.ch.i, family = "binomial")
+#Obtain the results
 summary(m.problems.sp.solve2)
 
-anova(m.problems.sp.solve, m.problems.sp.solve2, test = "Chisq")
+# Compare the models with and without the status factor
+anova(m.problems.sp.solve2 , m.problems.sp.solve, test = "Chisq")
 
 ```
+The likelihood ratio test confirms that removing the country and condition variables do not significantly reduce model fit. Therefore, we simplify the model by excluding them.
 
-The likelihood ratio test confirms that removing the condition variable does not significantly reduce model fit. Therefore, we simplify the model by excluding it.
+We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of the problems are associated with detractors.
 
-We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of detractors is associated with loading photo problems.
 
-### 5.3.1. Creating Metrics to Interpret the Model
+### 5.4.2.1 Model Metrics
+
 
 To interpret the results of our binomial logistic regression, we use reusable codes from our toolkit that will help us calculate the predicted percentage of detractors when the loading problem is present and not, the differences in these predicted percentages, the relative probabilities (risk ratios), and the odds ratios.
 
@@ -1421,9 +1305,11 @@ Lastly, we visually represent the predicted proportions of detractors to clearly
 # Add descriptive labels for each factor
 m.problems.sp.solve2.metrics.df$Label <- NA_character_
 m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "(Intercept)"] <- 
-  "No Photo Problems"
-m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "problem.photo"] <- 
-  "Problems Loading Photos"
+  "No Specific Problems"
+m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "problem.photo"] <- "Problems Loading Photos"
+m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "problem.info"] <- "Problems Checking Information"
+m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "problem.deadline"] <- "Problems of Failing Deadlines"
+
 
 
 # Create the dot-and-whisker plot for the predictions
@@ -1435,7 +1321,7 @@ ggplot(m.problems.sp.solve2.metrics.df, aes(x = Prediction,
     geom_text(aes(label = paste(round(Prediction,1), "%")), 
             vjust = -1, size = 3.5) + 
   labs(
-    title = "Expected Detractors by Problems Loading Photos in the Chat",
+    title = "Expected Detractors by Slow Resolution Problems",
     x = "% of Detractors", 
     y = "Stated Problems"
   ) +
