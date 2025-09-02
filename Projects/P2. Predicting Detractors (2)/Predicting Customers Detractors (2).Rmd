@@ -47,6 +47,7 @@ library(psych)       # Descriptive statistics
 library(car)         # VIF and regression diagnostics
 library(glmnet)      # Penalized logistic regression
 library(boot)        # Bootstrapping
+library(MASS)        # Generation of random coefficients
 
 ```
 
@@ -1336,6 +1337,45 @@ We can see that problems uploading photos have a strong impact on the likelihood
 
 ## 5.5. Impact of Problems Loading Photos Across All Users
 
+We will simulate how the correction of each of the problems identified would impact the reduction of detractors using a Montercarlo technique.
+
+### 5.5.1. Simulating Coefficients of the Relation between Problems and Detractors
+
+We first extract the covariance matrix of the model that especificies these relations
+
+```{r}
+matriz_vcov <- vcov(m.problems.sp.solve2)
+matriz_vcov
+```
+
+We can see that the diagonal corresponds with the variance of the coeficients (if we calculate the square root we obtain the standard error of the coefficients). Outside the diagonal we can see the covariances that represent the relation in the estimation errors of the coefficients, which we can see is minimal for all problems. 
+
+Next, we generate a set of random coefficients, using the matrix to simulate them. 
+
+```{r}
+
+# Extract coefficients from the original model
+original_coefficients <- coef(m.problems.sp.solve2)
+
+# Set the n for the number of simulations
+n_simulations <- 10000 
+
+# Generate a matrix where each line is a set of simulated coefficients
+simulated_coefficients <- mvrnorm(n = n_simulations, 
+                                 mu = original_coefficients, 
+                                 Sigma = matriz_vcov)
+```
+
+
+
+
+
+
+
+
+
+
+
 To understand what is the impact that this photo issue is having on the total detractors we have in customer service, we have to consider two pieces of information: 
 - Estimates of the extent to which this problem is present.
 - The estimated relation between the presence of this problem and probability to become detractors (seen in the prior section)
@@ -1373,6 +1413,15 @@ write.xlsx(data.complaints, "Predicting Detractors 2. data.complaints.xlsx")
  
 
 Se me ocurre: - Primero utilizar una simulación con bootstraping the x casos (e.g., 100000) donde simulemos la presencia del problema en cada subgrupo (i.e., en el subgrupo de chat incorrect items, y en el subgrupo de chat other issues). Para ello usaríamos el porcentaje de la presencia estimado y su CI. - Simular también el efecto asociado para cada uno de los casos anteriores, usando la estimación de la reducción de detractores y su CI. - Multiplicar para cada uno de los 10000 casos el efecto por la presencia, obteniendo de esta manera una distribución de nuestras estimaciones de la probabilidad de reducir detractores dentro de cada subgrupo (e.g., dentro de chat incorrect items). Así podemos obtener la reducción de detractores dentro de ese subgrupo y su intervalo de confianza. - Ponderar ese número por el porcentaje de casos que ese subgrupo representa en el total de casos de customer service, por ejemplo por .10 para chat incorrect item issues. 
+
+
+Se me ocurre: - 1. Para tener en cuenta la prevalencia de los problemas: utilizar una simulación con bootstraping the x casos (e.g., 100000) donde simulemos la presencia de cada problema en cada subgrupo (i.e., en el subgrupo de chat incorrect items, y en el subgrupo de chat other issues). Para cada problema,  usaríamos el porcentaje de la presencia estimado y su CI obtenidos a partir de un modelo de regresion logística en el que se predigan los detractores a partir del problema y otros factores contextuales (país, contexto) que sean significativos en dicha predicción.  
+
+ - 2. Para tener en cuenta el efecto de los problemas en los detractores. Utilizar mi modelo de regresión para calcular el incremento porcentual de detractores asociados a la presencia de cada problema, y sus ci. Simular también 10000 casos de esas estimaciones de incremento porcentual en detractores. 
+ 
+ - 3. Para obtener la reducción porcentual en cada contexto que haya sido significativo en la prevalencia de cada probema: Multiplicar para cada uno de los 10000 casos simulados de la presencia por uno de los 10000 casos simulados para el efecto de la presencia del problema en los detractores. Obtener con ello la reducción de detractores dentro de ese subgrupo y su intervalo de confianza. 
+ 
+ - 4. Para tener en cuenta el número de casos totales asociados a cada contexto: Ponderar el resultado anterior por el porcentaje de casos que ese subgrupo representa en el total de casos de customer service, por ejemplo por .10 para chat incorrect item issues. 
 
 
 
