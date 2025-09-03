@@ -767,7 +767,7 @@ ggplot(m.solve2.metrics.df, aes(x = Prediction,
     geom_text(aes(label = paste(round(Prediction,1), "%")), 
             vjust = -1, size = 3.5) + 
   labs(
-    title = "Expected Chat Complaints By Issue Attended",
+    title = "Slow Resolution Complaints in Chat By Issue Attended",
     x = "% of Complaints",
     y = "Issue Type"
   ) +
@@ -1102,80 +1102,30 @@ We further check if the differences in the presence of the problems are statisti
 
 ### 5.3.3. Testing Significance of Differences Across Conditions in Slow Resolution Problems
 
-To confirm that the difference in the problems loading the photo between the two conditions was statistically significant, and that there were not other significant differences across conditions, we conduct chi-square tests. 
-
-We use chi-square tests instead of logistic regression because chi-square tests are robust to having some of the categories with 0 cases, as it happens for example for our category of photo problems in other issues. 
-
-To perform chi-squares tools, we use a reusable function from my toolkit. We first specify this function. 
-
+To confirm that the difference in the problems loading the photo between the two conditions was statistically significant, and that there were not other significant differences across conditions, we conduct logistic regression models to predict the problems from the factor condition, using country as a covariate. 
 
 ```{r}
 
-# The reusable function: 
-f.chisq.tests <- function(my.dv.list, my.factor, my.data){
-  
-  #Create an empty list of results and a marker for indexing the results
-  results <- list()
-  p <- 1
-  
-  # Create a loop for each variable
-  for (dv in my.dv.list){
-    
-    #Obtain the current table of analysis
-    current.table <- table(my.data[[dv]], my.data[[my.factor]])
-    
-    #Calculate chi square test and save results
-    chi_square_test <- chisq.test (current.table)
-    chi_value <- chi_square_test$statistic
-    chi_df <- chi_square_test$parameter
-    chi_p <- chi_square_test$p.value
-    expected <- chi_square_test$expected
-    low.count <- any(expected < 5)
-    
-    # Calculate Fisher test and save results
-    fisher_test <- fisher.test(current.table)
-    fisher_p <- fisher_test$p.value
-    if (all(dim(current.table) == 2)) {
-     fisher_odds_ratio <- fisher_test$estimate
-     fisher_odds_ratio_lower <- fisher_test$conf.int[1]
-     fisher_odds_ratio_upper <- fisher_test$conf.int[2]
-        } else {
-        fisher_odds_ratio <- NA
-        fisher_odds_ratio_lower <- NA
-        fisher_odds_ratio_upper <- NA
-}
+# For problems loading the photo
+m.problem.photo <- glm (problem.photo ~ condition + country, data = data.ch.i)
+summary(m.problem.photo)
 
-    
-    # Save the results
-    results[[p]] <- data.frame(dep.variable = dv, factor = my.factor, p.chi.square = chi_p, cells_below_5 = low.count, value.chi.square = chi_value, chi.square.df = chi_df, fisher.p = fisher_p, odds.ratio = fisher_odds_ratio, ci.lower.fisher.odds.ratio = fisher_odds_ratio_lower, ci.upper.fisher.odds.ratio = fisher_odds_ratio_upper, stringsAsFactors = FALSE)
-    p <- p + 1
-    
-  } # Close the loop for the dv
-  
-# Put together the results
-results.df <- do.call(rbind, results)
-rownames(results.df) <- NULL
+# Problems of slow information check
+m.problem.info <- glm (problem.info ~ condition + country, data = data.ch.i)
+summary(m.problem.info)
 
-#Return the dataframe
-return(results.df)
-}
+# Problems of unmet deadlines
+m.problem.deadline <- glm (problem.deadline ~ condition + country, data = data.ch.i)
+summary(m.problem.deadline)
 
-```
 
-Then we apply the function to our list of problem variables. 
+# Unspecified problems
+m.problem.unspecified <- glm (problem.unspecified ~ condition + country, data = data.ch.i)
+summary(m.problem.unspecified)
 
-```{r}
-#List of dependent variables about slow resolution problems
-dv.variables <- c("problem.photo", "problem.info", "problem.deadline", "problem.unspecified")
-
-#Application of the function to the list
-chi.sq.df <-f.chisq.tests (dv.variables, "condition", data.ch.i)
-chi.sq.df
 
 ```
 The chi-square tests confirm that problems uploading photos in the chat are significantly more frequent in cases experiencing incorrect item issues, versus other cases, and that this is the only significant difference we observe. (problem.info does not pass the Bonferroni Threshold)
-
-Now it is time to evaluate the impact of this problem in the likelihood to recommend our service. 
 
 
 ## 5.4. Modeling
@@ -1361,14 +1311,349 @@ original_coefficients <- coef(m.problems.sp.solve2)
 n_simulations <- 10000 
 
 # Generate a matrix where each line is a set of simulated coefficients
-simulated_coefficients <- mvrnorm(n = n_simulations, 
+simulated_coefficients.df <- data.frame(mvrnorm(n = n_simulations, 
                                  mu = original_coefficients, 
-                                 Sigma = matriz_vcov)
+                                 Sigma = matriz_vcov))
+
+#Update the variable names
+old.names <- names (simulated_coefficients.df)
+new.names <- paste0 ("coef.", old.names)
+names(simulated_coefficients.df) <- new.names
+head(simulated_coefficients.df)
+```
+
+### 5.5.2. Simulating The Presence of the Problems Across Conditions
+
+To ponderate the effects simulated above by the presence of the problems, we first need to simulate the presence based on our data. 
+
+For that, we extract the prevalence of the problems in our sample and the confidence intervals of those prevalences. It is important to note that for the problem loading photos and for problems checking the information, differed across conditions, so we will use the specific percentages for each conditon
+
+```{r}
+f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factor
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf in f.levels){
+          
+          # Extract the vector, successes and number of cases
+          current.vector <- my.data[my.data[[my.factor]]==lf, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(dep.variable = dv, factor = lf, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+      } # close the loop for the factor
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+
+```
+
+We apply the function to 
+
+```{r}
+
+dv.list = c("problem.photo", "problem.info", "problem.deadline")
+
+prop.problems.by.condition.df <- f.prop.dicdvl.1f (my.data = data.ch.i,
+                  my.dv.list = dv.list,
+                  my.factor = "condition")
+
+prop.problems.by.condition.df
+
+
+```
+
+
+For the deadlines problems there were not significant differences, so we will use the general prevalence of this problem in the whole sample. We first calculate it and imput its value for both conditions in the above results. 
+
+```{r}
+# --- 1. Calculation of the percentage and 95% CI for problem.deadlines
+
+# Extract a frequency table
+t.problem.deadline <- with(data.ch.i, table(problem.deadline))
+t.problem.deadline
+
+# Calculate the proportion and confidence interval based on the table
+prop.problem.deadline <- binom.test(x = t.problem.deadline[2], n = sum(t.problem.deadline))
+prop.problem.deadline
+
+
+# --- 2. Update the prior dataframe of percentages with the percentage results for deadline problems
+# Save the percentages in a new dataframe
+prevalence.par.df <- prop.problems.by.condition.df
+
+#Convert them to proportions
+prevalence.par.df [,3:5] <- prevalence.par.df [,3:5]/100
+names (prevalence.par.df)[names(prevalence.par.df) %in% c("percentage", "ci_lower.perc", "ci_upper.perc")] <- c("prop", "ci.lower.prop", "ci.upper.prop")
+
+
+
+#Update the results for deadline problems
+prevalence.par.df [5:6, 3] <- prop.problem.deadline$estimate 
+prevalence.par.df [5:6, 4] <- prop.problem.deadline$conf.int [1] 
+prevalence.par.df [5:6, 5] <- prop.problem.deadline$conf.int [2] 
+prevalence.par.df
+
+
+
+```
+
+
+For each problem across each condition, we calculate the beta and alpha values for the simulation of the prevalence, and keep it in a dataframe. 
+
+```{r}
+# Extract the variance of the percentages based on the confidence intervals
+prevalence.par.df$var.prop <- ((prevalence.par.df$ci.upper.prop - prevalence.par.df$ci.lower.prop) / (2 * 1.96)) ^ 2
+
+# Calculate the alpha value
+prevalence.par.df$alpha <- prevalence.par.df$prop * ((prevalence.par.df$prop * (1 - prevalence.par.df$prop) / prevalence.par.df$var.prop) - 1)
+
+# Calculate the beta value
+prevalence.par.df$beta <- (1 - prevalence.par.df$prop) * ((prevalence.par.df$prop * (1 - prevalence.par.df$prop) / prevalence.par.df$var.prop) - 1)
+
+#Check the results
+prevalence.par.df
+  
+   
+  
+  
+```
+
+Now we calculate the prevalences in a simulation of 10000
+
+```{r}
+
+# Function to perform the beta distributions for the prevalence
+
+f.beta.simulation <- function (my.n, my.data, my.dv, my.alpha, my.beta) {
+  
+  # Create a list to keep the results
+  results <- list ()
+  p <- 1
+  
+  # Extract the names of the dvs
+  dv.names <- unique (my.data[[my.dv]])
+  
+  # Open a loop for each dv
+  for (dv in dv.names) {
+    
+    #Extract the parameters
+    current.alpha <- my.data[my.data[[my.dv]] == dv, my.alpha]
+    current.beta <- my.data[my.data[[my.dv]] == dv, my.beta]
+
+    # Simulate a vector that indicates presence of each dv
+    simulated_vector <- rbeta(n = my.n,
+                              shape1 = current.alpha, 
+                              shape2 = current.beta)
+    
+    # Save the results
+    results [[p]] <- simulated_vector
+    p = p + 1
+  }
+  
+  # Bind the results in columns of a single daframe
+  results.df <- data.frame(do.call(cbind, results))
+  column.names <- paste0("prev.", dv.names)
+  names(results.df) <- column.names
+  
+  # Return the dataframe
+  return(results.df)
+}
+
+
+```
+
+
+And we use the function to simulate the prevalences across the two conditions
+
+```{r}
+# ---- 1. For incorrect item issues
+
+# Create a subset dataframe with the incorrect item parameters
+ii.prevalence.par.df <- prevalence.par.df [prevalence.par.df$factor == "chat_incorrect_item", ]
+ii.prevalence.par.df 
+
+# Apply the function to perform beta distributions
+ii.prevalence.simulation.df <- f.beta.simulation (my.n = n_simulations, 
+                                                  my.data = ii.prevalence.par.df,
+                                                  my.dv = "dep.variable", 
+                                                  my.alpha = "alpha", 
+                                                  my.beta = "beta")
+
+# Merge the simulation of the prevalence and the simulation of the coefficients
+ii.simulation <- cbind(ii.prevalence.simulation.df, simulated_coefficients.df)
+
+# See the results
+head(ii.simulation)
+
+
+# ---- 2. For other issues
+
+# Create a subset dataframe with the incorrect item parameters
+oi.prevalence.par.df <- prevalence.par.df [prevalence.par.df$factor == "chat_other_issues", ]
+oi.prevalence.par.df 
+
+# Apply the function to perform beta distributions
+oi.prevalence.simulation.df <- f.beta.simulation (my.n = n_simulations, 
+                                                  my.data = oi.prevalence.par.df,
+                                                  my.dv = "dep.variable", 
+                                                  my.alpha = "alpha", 
+                                                  my.beta = "beta")
+
+# Merge the simulation of the prevalence and the simulation of the coefficients
+oi.simulation <- cbind(oi.prevalence.simulation.df, simulated_coefficients.df)
+
+# See the results
+head(oi.simulation)
+
+
+
+
+```
+
+
+We can proceed to estimate the probabilities for the present situation
+
+```{r}
+# 1.--- Estimate present probabilities of detractors 
+
+# 1.1 - For incorrect item issues
+ii.simulation$present.prob <- with (ii.simulation, {
+  1 / (1 + exp (-1*(coef.X.Intercept.+
+                      prev.problem.photo * coef.problem.photo +
+                      prev.problem.info * coef.problem.info + 
+                      prev.problem.deadline * coef.problem.deadline)))
+})
+
+# 1.2 - For other issues
+oi.simulation$present.prob <- with (oi.simulation, {
+  1 / (1 + exp (-1*(coef.X.Intercept.+
+                      prev.problem.photo * coef.problem.photo +
+                      prev.problem.info * coef.problem.info + 
+                      prev.problem.deadline * coef.problem.deadline)))
+})
+
+
+
+
+
 ```
 
 
 
 
+
+
+
+```{r}
+
+# Inicializa un data frame para guardar los resultados finales
+resultados_simulacion <- data.frame(
+  reduccion_photo = numeric(10000),
+  reduccion_info = numeric(10000),
+  reduccion_deadline = numeric(10000)
+)
+
+# El bucle de simulación
+for (i in 1:10000) {
+  
+  # Paso 1: Generar un conjunto de coeficientes para esta iteración
+  # (Ya hiciste esto y lo guardaste en 'simulated_coefficients')
+  coef_simulados <- simulated_coefficients[i, ]
+  
+  # Paso 2: Generar un valor de prevalencia simulado para cada problema
+  #         y cada condición, usando los parámetros alpha y beta.
+  prev_photo_incorrect_sim <- rbeta(1, prevalence.par.df$alpha[1], prevalence.par.df$beta[1])
+  prev_photo_other_sim <- rbeta(1, prevalence.par.df$alpha[2], prevalence.par.df$beta[2])
+  # Repite para los otros problemas...
+  prev_info_incorrect_sim <- rbeta(1, prevalence.par.df$alpha[3], prevalence.par.df$beta[3])
+  prev_info_other_sim <- rbeta(1, prevalence.par.df$alpha[4], prevalence.par.df$beta[4])
+  prev_deadline_sim <- rbeta(1, prevalence.par.df$alpha[5], prevalence.par.df$beta[5])
+  
+  # Ahora que tienes los coeficientes y las prevalencias simuladas,
+  # puedes pasar al cálculo.
+  
+  # --- Paso 3: Cálculo de la probabilidad de detractor en el ESCENARIO ACTUAL ---
+  # Calcula la probabilidad en el subgrupo 'incorrect items'
+  prob_detractor_i_actual <- 1 / (1 + exp(-(
+    coef_simulados["(Intercept)"] +
+    coef_simulados["problem.photo"] * prev_photo_incorrect_sim +
+    coef_simulados["problem.info"] * prev_info_incorrect_sim +
+    coef_simulados["problem.deadline"] * prev_deadline_sim
+  )))
+  # ...y para el subgrupo 'other issues'
+  prob_detractor_o_actual <- 1 / (1 + exp(-(
+    coef_simulados["(Intercept)"] +
+    coef_simulados["problem.photo"] * prev_photo_other_sim +
+    coef_simulados["problem.info"] * prev_info_other_sim +
+    coef_simulados["problem.deadline"] * prev_deadline_sim
+  )))
+  
+  # Calcula el porcentaje total de detractores actual (ponderando)
+  porc_detractor_total_actual <- (prob_detractor_i_actual * 0.10) + (prob_detractor_o_actual * 0.30)
+  
+  # --- Paso 4: Calcular la probabilidad en los ESCENARIOS CORREGIDOS ---
+  # Escenario 1: Corregir problem.photo (prevalencia = 0)
+  prob_detractor_i_photo <- 1 / (1 + exp(-(
+    coef_simulados["(Intercept)"] +
+    coef_simulados["problem.photo"] * 0 + # Aquí la prevalencia es 0
+    coef_simulados["problem.info"] * prev_info_incorrect_sim +
+    coef_simulados["problem.deadline"] * prev_deadline_sim
+  )))
+  prob_detractor_o_photo <- 1 / (1 + exp(-(
+    coef_simulados["(Intercept)"] +
+    coef_simulados["problem.photo"] * 0 + # Aquí la prevalencia es 0
+    coef_simulados["problem.info"] * prev_info_other_sim +
+    coef_simulados["problem.deadline"] * prev_deadline_sim
+  )))
+  porc_detractor_total_photo <- (prob_detractor_i_photo * 0.10) + (prob_detractor_o_photo * 0.30)
+  
+  # ...y lo mismo para los escenarios de corrección de problem.info y problem.deadline.
+  
+  # --- Paso 5: Calcular y guardar las reducciones porcentuales ---
+  reduccion_photo <- ((porc_detractor_total_actual - porc_detractor_total_photo) / porc_detractor_total_actual) * 100
+  resultados_simulacion$reduccion_photo[i] <- reduccion_photo
+  # ...y lo mismo para las otras reducciones.
+}
+
+# Al final del bucle, los percentiles 2.5 y 97.5 de las columnas en 'resultados_simulacion'
+# te darán tu intervalo de confianza del 95%.
+
+
+```
 
 
 
@@ -1387,6 +1672,7 @@ To understand what is the impact that this photo issue is having on the total de
 * Estimación de % of detractors en incorrect item issues y otros casos si el problema no estuviera presente: 44.7% en ambos, si, pero de cuánto a cuánto se reduce en cada condición. 
 
 Creo que la solución va a ser simular x casos con la probabilidad de que el problema esté presente (obtenido dle modelo de presencia y su CI), y x casos la diferencia porcentual del efecto (con sus CI). Estos valores se multiplicarán uno por el otro. De esta manera tendremos los intervalos de confianza
+
 
 
 

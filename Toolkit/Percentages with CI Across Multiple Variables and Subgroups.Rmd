@@ -39,9 +39,87 @@ data.ch.i <- read.xlsx("Predicting Detractors 2. data.ch.i.xlsx")
 ```
 
 
-# 1. Dichotomous DV Variables
+# 1. Proportions for Lists of Dichotomous DVs
 
-## 1.1. Working with a list of Dichotomous DV variables and 2 Grouping Factors
+## Proportions for a List of Dicotomous Variables Across 1 Fixed Factor
+
+* Expected Outcome: a dataframe with columns for percentages and 95% CI limits for all dvs and subgroups specified by the factor
+
+* Input: 
+  * The original dataframe (my.data).
+  * The name of a vector that lists the dependent variables of interest (that vector has to contain the variable names as character strings). 
+  * The name of the factor used for the subgroups (my.factor), as a character string. 
+  
+```{r}
+f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factor
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf in f.levels){
+          
+          # Extract the vector, successes and number of cases
+          current.vector <- my.data[my.data[[my.factor]]==lf, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(dep.variable = dv, factor = lf, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+      } # close the loop for the factor
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+```
+  
+* Example of Usage: 
+
+This example is based on the project Predicting Customers Detractors 2, which uses the data.ch.i dataframe
+
+```{r}
+dv.list = c("problem.photo", "problem.info", "problem.deadline")
+
+prop.problems.by.condition.df <- f.prop.dicdvl.1f (my.data = data.ch.i,
+                  my.dv.list = dv.list,
+                  my.factor = "condition")
+
+prop.problems.by.condition.df
+
+```
+
+
+
+## 1.1. Percentages for a List of Dichotomous DVs Across 2 Fixed Factors
 
 ### 1.1.1. Reusable Function to Obtain a Dataframe with Descriptives
 
