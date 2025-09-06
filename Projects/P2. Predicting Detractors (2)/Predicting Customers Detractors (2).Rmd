@@ -47,7 +47,7 @@ library(psych)       # Descriptive statistics
 library(car)         # VIF and regression diagnostics
 library(glmnet)      # Penalized logistic regression
 library(boot)        # Bootstrapping
-library(MASS)        # Generation of random coefficients
+library(MASS)        # Simulate coefficients from a multivariate normal distribution
 
 ```
 
@@ -1287,9 +1287,228 @@ We can see that problems uploading photos have a strong impact on the likelihood
 
 ## 5.5. Impact of Problems Loading Photos Across All Users
 
-We will simulate how the correction of each of the problems identified would impact the reduction of detractors using a Montercarlo technique.
+We will simulate how the correction of each of the problems identified would impact the reduction of detractors 
+
 
 ### 5.5.1. Simulating Coefficients of the Relation between Problems and Detractors
+
+For this simulation we will: 
+- Simulate a sample distribution of our regression coefficients based on our model about the effect of the problems in customers becoming detractors. 
+- Simulate a sample distribution of the predicted probabilities of being detractor using a bootstrapping technique that uses the simulation of the distribution of coefficients. 
+
+
+```{r}
+
+f.bootstrap.predictions <- function (my.n, my.model, my.data, my.factor){
+
+# Create a list to store the final results
+final.results <- list()
+  
+# Create subsets for subgroups
+groups <- unique(my.data [[my.factor]])
+
+# Extract coefficients from the original model
+original.coefficients <- coef(my.model)
+
+# Extract the names of the predictors in the original model
+predictor.names <- names(original.coefficients) 
+predictor.names <- predictor.names [-1]
+
+# Extract the covariance matrix
+matriz_vcov <- vcov(my.model)
+matriz_vcov
+
+# Generate a matrix where each line is a set of simulated coefficients
+simulated_coefficients.df <- data.frame(mvrnorm(n = my.n, 
+                                 mu = original.coefficients, 
+                                 Sigma = matriz_vcov))
+
+# A loop for each subgroup
+for (group in groups) {
+   
+  # Create a list to store the results for a group 
+  
+  #Create an empty vector for the sampling distribution
+  sampling.distribution <- rep(NA, my.n)
+  
+  # Select a the subsample for the subgroup
+  subsample <- my.data[my.data [[my.factor]] == group, ]
+
+  # A loop for each sample we simulate
+  for (i in 1:my.n) {
+  
+    # Selecting the simulated coefficients for the sample
+    sample.coefficients <- simulated_coefficients.df [i , ]
+  
+  
+    # Selecting a bootstrap sample from our sample
+    bootstrap.indexes <- sample(x = 1:nrow(subsample),
+                           size = nrow(subsample),
+                           replace = TRUE)
+    bootstrap.sample <- subsample [bootstrap.indexes, ]
+    
+    # Create a vector to keep the results of the sample cases
+    prob.success <- rep(NA, nrow(bootstrap.sample))
+  
+      # A loop for each case in the bootstrapped sample
+      for (c in 1:nrow(bootstrap.sample)){
+      
+      # Empty vector to keep the effect for the presence of each predictor
+      predictor.effects.vector <- rep(NA, length(predictor.names))
+      p <- 1
+      
+      # Loop for each predictor
+       for (name in predictor.names) { 
+         
+         #Calculate the effect per each predictor
+         predictor.effects.vector [p] <- sample.coefficients [[name]] * bootstrap.sample [[name]][c]
+         p <- p + 1
+      } # Close the loop each predictor
+       
+       # Calculate the probability of each case
+        prob.success [c] <- 1 / (1 + exp (-1 * (sample.coefficients[1] + sum(predictor.effects.vector))))
+    
+      } # Close the loop for each case in the bootstrapped sample
+
+  # Calculate the proportion of successes in the bootstrapped sample
+  proportion.sample <- mean(prob.success)
+  
+  sampling.distribution [i] <- proportion.sample 
+  
+  } #Close the loop for each sample 
+  
+  # Save results of all the samples
+  estimate.probability <- median (sampling.distribution)
+  lower.ci.estimate <- quantile(sampling.distribution, probs = 0.025)
+  upper.ci.estimate <- quantile(sampling.distribution, probs = 0.975)
+  
+  # Create a name for the sublist of results for each subgropu
+  name.group.results <- paste0(group, "results")
+  
+  # Store the results
+  final.results [name.group.results] <- list(estimate = estimate.probability, lower.ci = lower.ci.estimate, upper.ci = upper.ci.estimate, bootstrap.sampling.dist = sampling.distribution)
+  
+  
+} #Close the loop for each subgroup
+
+return (final.results)
+}
+
+```
+
+Application: 
+
+```{r}
+sim.predictors.present <- f.bootstrap.predictions (my.n = 10,
+                        my.model = m.problems.sp.solve2, 
+                        my.data = data.ch.i, 
+                        my.factor = "condition")
+```
+
+
+
+CORREGIDA ROBUSTA
+
+```{r}
+f.bootstrap.predictions <- function(my.n, my.model, my.data, my.factor) {
+  
+  if (!require(MASS, quietly = TRUE)) {
+    install.packages("MASS")
+    library(MASS)
+  }
+  
+  final.results <- list()
+  groups <- unique(my.data[[my.factor]])
+  original.coefficients <- coef(my.model)
+  predictor.names <- names(original.coefficients)[-1]
+  matriz_vcov <- vcov(my.model)
+  
+  # Generar coeficientes simulados
+  simulated_coefficients <- mvrnorm(n = my.n, 
+                                   mu = original.coefficients, 
+                                   Sigma = matriz_vcov)
+  simulated_coefficients.df <- as.data.frame(simulated_coefficients)
+  
+  # A loop for each subgroup
+  for (group in groups) {
+    sampling.distribution <- rep(NA, my.n)
+    subsample <- my.data[my.data[[my.factor]] == group, ]
+    
+    # A loop for each sample we simulate
+    for (i in 1:my.n) {
+      sample.coefficients <- simulated_coefficients.df[i, ]
+      
+      # Bootstrap sample
+      bootstrap.indexes <- sample(1:nrow(subsample), nrow(subsample), replace = TRUE)
+      bootstrap.sample <- subsample[bootstrap.indexes, ]
+      
+      # Initialize probability vector
+      prob.success <- numeric(nrow(bootstrap.sample))
+      
+      # Debug: check structure
+      if (i == 1 & group == groups[1]) {
+        print(paste("Nombres de coeficientes:", names(sample.coefficients)))
+        print(paste("Nombres de predictores:", predictor.names))
+        print(paste("Estructura de bootstrap.sample:", class(bootstrap.sample)))
+      }
+      
+      # A loop for each case
+      for (c in 1:nrow(bootstrap.sample)) {
+        predictor.effects.vector <- numeric(length(predictor.names))
+        
+        for (p in 1:length(predictor.names)) {
+          name <- predictor.names[p]
+          # Extraer valores de forma más robusta
+          coef_value <- as.numeric(sample.coefficients[[name]])
+          data_value <- as.numeric(bootstrap.sample[[name]][c])
+          predictor.effects.vector[p] <- coef_value * data_value
+        }
+        
+        intercept <- as.numeric(sample.coefficients[1])
+        linear_predictor <- intercept + sum(predictor.effects.vector)
+        prob.success[c] <- 1 / (1 + exp(-linear_predictor))
+        
+        # Debug check
+        if (is.na(prob.success[c])) {
+          print(paste("NA en caso", c, ":", linear_predictor))
+        }
+      }
+      
+      # Verificar prob.success antes de mean()
+      if (any(is.na(prob.success))) {
+        print(paste("ADVERTENCIA: NAs en prob.success para iteración", i))
+        print(summary(prob.success))
+      }
+      
+      proportion.sample <- mean(prob.success, na.rm = TRUE)  # na.rm añadido temporalmente
+      sampling.distribution[i] <- proportion.sample
+    }
+    
+    estimate.probability <- median(sampling.distribution, na.rm = TRUE)
+    lower.ci.estimate <- quantile(sampling.distribution, probs = 0.025, na.rm = TRUE)
+    upper.ci.estimate <- quantile(sampling.distribution, probs = 0.975, na.rm = TRUE)
+    
+    name.group.results <- paste0(group, "_results")
+    final.results[[name.group.results]] <- list(
+      estimate = estimate.probability, 
+      lower.ci = lower.ci.estimate, 
+      upper.ci = upper.ci.estimate, 
+      bootstrap.sampling.dist = sampling.distribution
+    )
+  }
+  
+  return(final.results)
+}
+```
+
+
+```{r}
+sim.predictors.present <- f.bootstrap.predictions (my.n = 5000,
+                        my.model = m.problems.sp.solve2, 
+                        my.data = data.ch.i, 
+                        my.factor = "condition")
+```
+
 
 We first extract the covariance matrix of the model that especificies these relations
 
@@ -1381,7 +1600,7 @@ f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
 
 ```
 
-We apply the function to 
+Application of the function: 
 
 ```{r}
 
@@ -1397,7 +1616,7 @@ prop.problems.by.condition.df
 ```
 
 
-For the deadlines problems there were not significant differences, so we will use the general prevalence of this problem in the whole sample. We first calculate it and imput its value for both conditions in the above results. 
+For the deadlines problems there were not significant differences, so we will use the general prevalence of this problem in the whole sample. We first calculate it and input its value for both conditions in the above results. 
 
 ```{r}
 # --- 1. Calculation of the percentage and 95% CI for problem.deadlines
@@ -1567,6 +1786,23 @@ oi.simulation$present.prob <- with (oi.simulation, {
 })
 
 
+# 2.--- Estimate predicted probabilities after correcting for photo problems 
+
+# 1.1 - For incorrect item issues
+ii.simulation$predicted.prob.photo <- with (ii.simulation, {
+  1 / (1 + exp (-1*(coef.X.Intercept.+
+                      prev.problem.photo * 0 +
+                      prev.problem.info * coef.problem.info + 
+                      prev.problem.deadline * coef.problem.deadline)))
+})
+
+# 1.2 - For other issues
+oi.simulation$predicted.prob.photo <- with (oi.simulation, {
+  1 / (1 + exp (-1*(coef.X.Intercept.+
+                      prev.problem.photo * 0 +
+                      prev.problem.info * coef.problem.info + 
+                      prev.problem.deadline * coef.problem.deadline)))
+})
 
 
 
@@ -1574,6 +1810,23 @@ oi.simulation$present.prob <- with (oi.simulation, {
 
 
 
+
+```{r}
+f.detractors <- with(data.ch.i, table(detractor, condition))
+prop.f.detractors <-prop.table(f.detractors, margin = 2)
+f.detractors
+prop.f.detractors
+
+```
+
+
+
+
+
+
+
+
+SEGUIR AQUÍ: Preguntar a AI si es correcto multiplicar por los coeficients por las probabilidades, en lugar de por la presencia o no de casos. Parece que lo que estamos simulando son posibles resultados poblacionales. 
 
 
 
