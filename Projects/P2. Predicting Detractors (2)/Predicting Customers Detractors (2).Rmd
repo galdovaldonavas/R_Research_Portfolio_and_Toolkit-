@@ -1301,8 +1301,18 @@ For this simulation we will:
 
 f.bootstrap.predictions <- function (my.n, my.model, my.data, my.factor){
 
-# Create a list to store the final results
+# --- Setup
+  
+# Make sure library MASS is installed and loaded
+    if (!require(MASS, quietly = TRUE)) {
+    install.packages("MASS")
+    library(MASS)
+  }
+
+# Create a list to store the final results and the summary of the results
 final.results <- list()
+summary.list <- list()
+pt <- 1
   
 # Create subsets for subgroups
 groups <- unique(my.data [[my.factor]])
@@ -1311,99 +1321,224 @@ groups <- unique(my.data [[my.factor]])
 original.coefficients <- coef(my.model)
 
 # Extract the names of the predictors in the original model
-predictor.names <- names(original.coefficients) 
-predictor.names <- predictor.names [-1]
+predictor.names <- names(original.coefficients)[-1]
+
+
+
+# --- 1 Generate Simulated Coefficients
 
 # Extract the covariance matrix
 matriz_vcov <- vcov(my.model)
-matriz_vcov
 
 # Generate a matrix where each line is a set of simulated coefficients
-simulated_coefficients.df <- data.frame(mvrnorm(n = my.n, 
+simulated_coefficients <- mvrnorm(n = my.n, 
                                  mu = original.coefficients, 
-                                 Sigma = matriz_vcov))
+                                 Sigma = matriz_vcov)
 
-# A loop for each subgroup
+simulated_coefficients.df <- as.data.frame (simulated_coefficients)
+
+
+# --- 2. Calculate Probabilities with Bootstrap Samples
+
+# - A loop for each subgroup
 for (group in groups) {
    
-  # Create a list to store the results for a group 
-  
   #Create an empty vector for the sampling distribution
   sampling.distribution <- rep(NA, my.n)
   
   # Select a the subsample for the subgroup
   subsample <- my.data[my.data [[my.factor]] == group, ]
-
-  # A loop for each sample we simulate
+  
+  # - A loop for each sample we simulate
   for (i in 1:my.n) {
   
-    # Selecting the simulated coefficients for the sample
+    # Select the simulated coefficients for the sample
     sample.coefficients <- simulated_coefficients.df [i , ]
   
-  
-    # Selecting a bootstrap sample from our sample
+    # Select a bootstrap sample from our sample
     bootstrap.indexes <- sample(x = 1:nrow(subsample),
                            size = nrow(subsample),
                            replace = TRUE)
     bootstrap.sample <- subsample [bootstrap.indexes, ]
     
     # Create a vector to keep the results of the sample cases
-    prob.success <- rep(NA, nrow(bootstrap.sample))
+    prob.success <- numeric(nrow(bootstrap.sample))
   
       # A loop for each case in the bootstrapped sample
       for (c in 1:nrow(bootstrap.sample)){
       
       # Empty vector to keep the effect for the presence of each predictor
-      predictor.effects.vector <- rep(NA, length(predictor.names))
-      p <- 1
+      predictor.effects.vector <- numeric(length(predictor.names))
       
-      # Loop for each predictor
-       for (name in predictor.names) { 
+      # A loop for each predictor
+       for (p in 1:length(predictor.names)) { 
          
-         #Calculate the effect per each predictor
+         # Extract the values of the predictive model from each predictor
+         name <- predictor.names[p] # save the name of the predictor
+         coef_value <- as.numeric (sample.coefficients [[name]])
+         data_value <- as.numeric (bootstrap.sample[[name]] [c])
          predictor.effects.vector [p] <- sample.coefficients [[name]] * bootstrap.sample [[name]][c]
-         p <- p + 1
+        
       } # Close the loop each predictor
        
-       # Calculate the probability of each case
-        prob.success [c] <- 1 / (1 + exp (-1 * (sample.coefficients[1] + sum(predictor.effects.vector))))
+      # Extract the remaining values of the predictive model
+      intercept <- as.numeric (sample.coefficients[1])
+      predictors.effect <- sum (predictor.effects.vector)
+      
+      # Calculate the probability of each case
+      prob.success [c] <- 1 / (1 + exp (-1 * (intercept + predictors.effect)))
     
+      # Debug check
+        if (is.na(prob.success[c])) {
+          print(paste("NA in case ", c, ", sample ", i, "subgroup ", group))
+        }
+      
       } # Close the loop for each case in the bootstrapped sample
 
-  # Calculate the proportion of successes in the bootstrapped sample
-  proportion.sample <- mean(prob.success)
+  # Verification of NAs in the estimation of sample cases
+      if (any(is.na(prob.success))) {
+        print(paste("ADVERTENCIA: NAs en prob.success para iteración", i))
+        print(summary(prob.success))
+      }
+    
+  # Calculate the average probability of success in the bootstrapped sample
+  proportion.sample <- mean(prob.success, na.rm = TRUE)
   
+  # Store the sample probability average in a vector for the sampling distribution
   sampling.distribution [i] <- proportion.sample 
   
   } #Close the loop for each sample 
   
   # Save results of all the samples
-  estimate.probability <- median (sampling.distribution)
-  lower.ci.estimate <- quantile(sampling.distribution, probs = 0.025)
-  upper.ci.estimate <- quantile(sampling.distribution, probs = 0.975)
+  estimate.probability <- median (sampling.distribution, na.rm = TRUE)
+  lower.ci.estimate <- quantile(sampling.distribution, probs = 0.025, na.rm = TRUE)
+  upper.ci.estimate <- quantile(sampling.distribution, probs = 0.975, na.rm = TRUE)
   
-  # Create a name for the sublist of results for each subgropu
+  # Create a name for the sublist of results for each subgroup
   name.group.results <- paste0(group, "results")
   
   # Store the results
-  final.results [name.group.results] <- list(estimate = estimate.probability, lower.ci = lower.ci.estimate, upper.ci = upper.ci.estimate, bootstrap.sampling.dist = sampling.distribution)
+  final.results [[name.group.results]] <- list(
+    estimate = estimate.probability, 
+    lower.ci = lower.ci.estimate,
+    upper.ci = upper.ci.estimate, 
+    bootstrap.sampling.dist = sampling.distribution
+  )
   
+  # Create a named vector to build a summary of results
+  summary.list [[pt]] <- data.frame(group.factor = paste0 (group), 
+                     estimate = estimate.probability,
+                     lower.ci = lower.ci.estimate,
+                     upper.ci = upper.ci.estimate,
+                     stringsAsFactors = FALSE)
+  pt <- pt + 1 
   
 } #Close the loop for each subgroup
+
+#  Add the summary to the final results as a dataframe
+summary.df <- do.call (rbind, summary.list)
+rownames(summary.df) <- NULL
+final.results [["summary.df"]] <- summary.df
+
+# Add the summary 
 
 return (final.results)
 }
 
 ```
 
-Application: 
+Application for the present situation: 
 
 ```{r}
-sim.predictors.present <- f.bootstrap.predictions (my.n = 10,
+# Apply the formula
+sim.present <- f.bootstrap.predictions (my.n = 5000,
                         my.model = m.problems.sp.solve2, 
                         my.data = data.ch.i, 
                         my.factor = "condition")
+
+# Extract a dataframe indicating the moment
+present.df <- data.frame(moment = rep("present", nrow(sim.present$summary.df)))
+present.df <- cbind(present.df, sim.present$summary.df)
+
 ```
+
+
+```{r}
+
+# Represent the problem photo as totally eliminated
+data.corrected <- data.ch.i
+data.corrected$problem.photo <- 0
+
+# Apply the formula
+sim.photo.corrected <- f.bootstrap.predictions (my.n = 5000,
+                        my.model = m.problems.sp.solve2, 
+                        my.data = data.corrected, 
+                        my.factor = "condition")
+
+# Extract a dataframe indicating the moment
+photo.corrected.df <- data.frame(moment = rep("expected if photo issues are fixed", nrow(sim.photo.corrected$summary.df)))
+photo.corrected.df <- cbind(photo.corrected.df, sim.photo.corrected$summary.df)
+
+# Bind the results for the present and the photo correction simulations
+impact.photo.correction.df <- rbind(present.df, photo.corrected.df)
+
+
+# Express in percentages
+impact.photo.correction.df [, c(3:5)] <- impact.photo.correction.df [, c(3:5)] * 100
+impact.photo.correction.df
+```
+
+
+
+Graph the results
+
+```{r}
+# Setting the order of the complaints variables
+impact.photo.correction.df$group.factor <- factor(impact.photo.correction.df$group.factor, levels = c("chat_incorrect_item", "chat_other_issues"))
+impact.photo.correction.df$moment <- factor(impact.photo.correction.df$moment, levels = c("present", "expected if photo issues are fixed"))
+
+# Titles for each faceted graph representing a type of complaint
+custom_titles <- c(
+  chat_incorrect_item   = "Incorrect Item Issues",
+  chat_other_issues     = "Other Issues"
+)
+
+# Plotting the bar graph
+ggplot(impact.photo.correction.df, aes(x = moment, y = estimate)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7, fill = "grey80") +
+  geom_errorbar(
+    aes(ymin = lower.ci, ymax = upper.ci),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ group.factor, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(group.factor = custom_titles)) +
+  labs(
+    y = "% of Detractors",
+    title = "Impact of Correcting Photo Issues in Chat"
+  ) +
+  scale_x_discrete(labels = c ("present", "after\ncorrection")) +
+  ylim(0, 100) +  
+  geom_text(
+    aes(label = paste0(round(estimate, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -3,                             # slightly above the bar
+    size = 3.5                                # text size
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold", size = 11), # the panel titles
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5, size = 11),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
+
+```
+
 
 
 

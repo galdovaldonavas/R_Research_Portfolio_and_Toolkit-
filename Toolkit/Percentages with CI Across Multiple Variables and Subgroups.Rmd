@@ -39,6 +39,7 @@ data.ch.i <- read.xlsx("Predicting Detractors 2. data.ch.i.xlsx")
 ```
 
 
+
 # 1. Proportions for Lists of Dichotomous DVs
 
 ## Proportions for a List of Dicotomous Variables Across 1 Fixed Factor
@@ -118,6 +119,56 @@ prop.problems.by.condition.df
 ```
 
 
+### 1.1.2. Graphing the Results
+
+We can use a bar graph to depict the results, e.g.: 
+
+```{r}
+# Setting the order of the complaints variables
+prop.problems.by.condition.df$dep.variable <- factor(prop.problems.by.condition.df$dep.variable, levels = c("problem.photo", "problem.info", "problem.deadline"))
+
+# Titles for each faceted graph representing a type of complaint
+custom_titles <- c(
+  problem.photo   = "Issues Loading the Photo",
+  problem.info     = "Slow Information Check",
+  problem.deadline = "Unmet Deadlines"
+)
+
+# Plotting the bar graph
+ggplot(prop.problems.by.condition.df, aes(x = factor, y = percentage)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7, fill = "grey80") +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) +
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(dep.variable = custom_titles)) +
+  labs(
+    y = "% of Cases",
+    title = "Prevalence of Chat Problems by Type of Issue Attended"
+  ) +
+  scale_x_discrete(labels = c ("incorrect\nitem", "other\nissue")) +
+  ylim(0, 100) +  
+  geom_text(
+    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -3,                             # slightly above the bar
+    size = 3.5                                # text size
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold", size = 11), # the panel titles
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5, size = 11),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
+
+```
 
 ## 1.1. Percentages for a List of Dichotomous DVs Across 2 Fixed Factors
 
