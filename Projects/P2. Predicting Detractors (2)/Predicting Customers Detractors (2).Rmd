@@ -1540,1105 +1540,135 @@ ggplot(impact.photo.correction.df, aes(x = moment, y = estimate)) +
 ```
 
 
-
-
-CORREGIDA ROBUSTA
-
-```{r}
-f.bootstrap.predictions <- function(my.n, my.model, my.data, my.factor) {
-  
-  if (!require(MASS, quietly = TRUE)) {
-    install.packages("MASS")
-    library(MASS)
-  }
-  
-  final.results <- list()
-  groups <- unique(my.data[[my.factor]])
-  original.coefficients <- coef(my.model)
-  predictor.names <- names(original.coefficients)[-1]
-  matriz_vcov <- vcov(my.model)
-  
-  # Generar coeficientes simulados
-  simulated_coefficients <- mvrnorm(n = my.n, 
-                                   mu = original.coefficients, 
-                                   Sigma = matriz_vcov)
-  simulated_coefficients.df <- as.data.frame(simulated_coefficients)
-  
-  # A loop for each subgroup
-  for (group in groups) {
-    sampling.distribution <- rep(NA, my.n)
-    subsample <- my.data[my.data[[my.factor]] == group, ]
-    
-    # A loop for each sample we simulate
-    for (i in 1:my.n) {
-      sample.coefficients <- simulated_coefficients.df[i, ]
-      
-      # Bootstrap sample
-      bootstrap.indexes <- sample(1:nrow(subsample), nrow(subsample), replace = TRUE)
-      bootstrap.sample <- subsample[bootstrap.indexes, ]
-      
-      # Initialize probability vector
-      prob.success <- numeric(nrow(bootstrap.sample))
-      
-      # Debug: check structure
-      if (i == 1 & group == groups[1]) {
-        print(paste("Nombres de coeficientes:", names(sample.coefficients)))
-        print(paste("Nombres de predictores:", predictor.names))
-        print(paste("Estructura de bootstrap.sample:", class(bootstrap.sample)))
-      }
-      
-      # A loop for each case
-      for (c in 1:nrow(bootstrap.sample)) {
-        predictor.effects.vector <- numeric(length(predictor.names))
-        
-        for (p in 1:length(predictor.names)) {
-          name <- predictor.names[p]
-          # Extraer valores de forma más robusta
-          coef_value <- as.numeric(sample.coefficients[[name]])
-          data_value <- as.numeric(bootstrap.sample[[name]][c])
-          predictor.effects.vector[p] <- coef_value * data_value
-        }
-        
-        intercept <- as.numeric(sample.coefficients[1])
-        linear_predictor <- intercept + sum(predictor.effects.vector)
-        prob.success[c] <- 1 / (1 + exp(-linear_predictor))
-        
-        # Debug check
-        if (is.na(prob.success[c])) {
-          print(paste("NA en caso", c, ":", linear_predictor))
-        }
-      }
-      
-      # Verificar prob.success antes de mean()
-      if (any(is.na(prob.success))) {
-        print(paste("ADVERTENCIA: NAs en prob.success para iteración", i))
-        print(summary(prob.success))
-      }
-      
-      proportion.sample <- mean(prob.success, na.rm = TRUE)  # na.rm añadido temporalmente
-      sampling.distribution[i] <- proportion.sample
-    }
-    
-    estimate.probability <- median(sampling.distribution, na.rm = TRUE)
-    lower.ci.estimate <- quantile(sampling.distribution, probs = 0.025, na.rm = TRUE)
-    upper.ci.estimate <- quantile(sampling.distribution, probs = 0.975, na.rm = TRUE)
-    
-    name.group.results <- paste0(group, "_results")
-    final.results[[name.group.results]] <- list(
-      estimate = estimate.probability, 
-      lower.ci = lower.ci.estimate, 
-      upper.ci = upper.ci.estimate, 
-      bootstrap.sampling.dist = sampling.distribution
-    )
-  }
-  
-  return(final.results)
-}
-```
-
-
-```{r}
-sim.predictors.present <- f.bootstrap.predictions (my.n = 5000,
-                        my.model = m.problems.sp.solve2, 
-                        my.data = data.ch.i, 
-                        my.factor = "condition")
-```
-
-
-We first extract the covariance matrix of the model that especificies these relations
-
-```{r}
-matriz_vcov <- vcov(m.problems.sp.solve2)
-matriz_vcov
-```
-
-We can see that the diagonal corresponds with the variance of the coeficients (if we calculate the square root we obtain the standard error of the coefficients). Outside the diagonal we can see the covariances that represent the relation in the estimation errors of the coefficients, which we can see is minimal for all problems. 
-
-Next, we generate a set of random coefficients, using the matrix to simulate them. 
+We can also express the impact in terms of expected percentage of decrease after the correction of the photo issue, using the bootstrapped results calculated earlier. We will calculate these perecentages within:
+- the cases of incorrect item issues attended by chat, which represent a 10% of total cases
+- the cases of other issues attended by chat, which represent a 30% of total cases
+- the total number of cases in customer service
 
 ```{r}
 
-# Extract coefficients from the original model
-original_coefficients <- coef(m.problems.sp.solve2)
+# --- Extract the sampling distributions simulated for each scenario
 
-# Set the n for the number of simulations
-n_simulations <- 10000 
+# Incorrect item issues for the present moment
+dist.present.ii <- sim.present[["chat_incorrect_itemresults"]][["bootstrap.sampling.dist"]]
 
-# Generate a matrix where each line is a set of simulated coefficients
-simulated_coefficients.df <- data.frame(mvrnorm(n = n_simulations, 
-                                 mu = original_coefficients, 
-                                 Sigma = matriz_vcov))
+# Incorrect item issues after the correction of the issue
+dist.photo.corrected.ii <- sim.photo.corrected[["chat_incorrect_itemresults"]][["bootstrap.sampling.dist"]]
 
-#Update the variable names
-old.names <- names (simulated_coefficients.df)
-new.names <- paste0 ("coef.", old.names)
-names(simulated_coefficients.df) <- new.names
-head(simulated_coefficients.df)
-```
+# Other issues for the present moment
+dist.present.oi <- sim.present[["chat_other_issuesresults"]][["bootstrap.sampling.dist"]]
 
-### 5.5.2. Simulating The Presence of the Problems Across Conditions
+# Other issues after the correction of the issue
+dist.photo.corrected.oi <- sim.photo.corrected[["chat_other_issuesresults"]][["bootstrap.sampling.dist"]]
 
-To ponderate the effects simulated above by the presence of the problems, we first need to simulate the presence based on our data. 
 
-For that, we extract the prevalence of the problems in our sample and the confidence intervals of those prevalences. It is important to note that for the problem loading photos and for problems checking the information, differed across conditions, so we will use the specific percentages for each conditon
+# --- Express a function to calculate differences between two distributions
 
-```{r}
-f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
+f.distribution.differences <- function(my.vector1, my.vector2) {
   
-  # Initialize an empty list to store the sampled subsets from each stratum.
-  results <- list() 
+  # Obtain the difference between the two distributions
+  distribution.differences <- my.vector1 - my.vector2
   
-  # Initialize a counter for indexing elements in the 'results' list.
-  p <- 1 
+  # Define the distribution of differences with metrics
+  dif.estimate <- median (distribution.differences,  na.rm = TRUE) *100
+  lower.ci.estimate <- quantile(distribution.differences, probs = 0.025, na.rm = TRUE) *100
+  upper.ci.estimate <- quantile(distribution.differences, probs = 0.975, na.rm = TRUE) *100
   
-  # Obtain the levels of the factor
-  f.levels <- unique (my.data[[my.factor]])
-  
-  #Create a loop for each dv and for each level of the factors
-    for (dv in my.dv.list){
-      for (lf in f.levels){
-          
-          # Extract the vector, successes and number of cases
-          current.vector <- my.data[my.data[[my.factor]]==lf, dv]
-          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
-          n <- length(current.vector.c) # number of cases in the vector
-          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
-          
-          # Calculate proportions and their 95% CI
-          if(n > 0){
-            proportion <- s / n #calculating proportions
-            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
-            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
-            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
-          }else{
-            proportion <- NA
-            ci_lower <- NA
-            ci_upper <- NA
-          }
-
-          # Save the results in a named vector
-          results [[p]] <- data.frame(dep.variable = dv, factor = lf, percentage = proportion * 100, 
-                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
-          p <- p + 1 
-          
-      } # close the loop for the factor
-    } # close the loop for the dv
-
-  #Combine the results in a dataframe and convert outcomes to numeric columns
-  results.df <- (do.call(rbind, results))
+  # Save the results in a dataframe
+  results.df <- data.frame (dif = dif.estimate, lower.ci = lower.ci.estimate, upper.ci = upper.ci.estimate)
   rownames(results.df) <- NULL
-
-  #Return the dataframe
+  
   return(results.df)
+  
 }
 
 
-```
+# --- Calculate the distribution of differences 
 
-Application of the function: 
-
-```{r}
-
-dv.list = c("problem.photo", "problem.info", "problem.deadline")
-
-prop.problems.by.condition.df <- f.prop.dicdvl.1f (my.data = data.ch.i,
-                  my.dv.list = dv.list,
-                  my.factor = "condition")
-
-prop.problems.by.condition.df
+# for incorrect item issues
+dist.differences.ii <- f.distribution.differences(dist.present.ii, dist.photo.corrected.ii)
 
 
-```
+# for other issues
+dist.differences.oi <- f.distribution.differences(dist.present.oi, dist.photo.corrected.oi)
 
 
-For the deadlines problems there were not significant differences, so we will use the general prevalence of this problem in the whole sample. We first calculate it and input its value for both conditions in the above results. 
+# for the total - including uncertainty of the non significant context (other issues)
+dist.differences.total.inc <- f.distribution.differences ((dist.present.ii * 0.10 + dist.present.oi * 0.30), (dist.photo.corrected.ii * 0.10 + dist.photo.corrected.oi *0.30))
 
-```{r}
-# --- 1. Calculation of the percentage and 95% CI for problem.deadlines
-
-# Extract a frequency table
-t.problem.deadline <- with(data.ch.i, table(problem.deadline))
-t.problem.deadline
-
-# Calculate the proportion and confidence interval based on the table
-prop.problem.deadline <- binom.test(x = t.problem.deadline[2], n = sum(t.problem.deadline))
-prop.problem.deadline
+# for the total - excluding uncertainty of the non significant context (other issues)
+dist.differences.total.ex <- f.distribution.differences ((dist.present.ii * 0.10), (dist.photo.corrected.ii * 0.10))
 
 
-# --- 2. Update the prior dataframe of percentages with the percentage results for deadline problems
-# Save the percentages in a new dataframe
-prevalence.par.df <- prop.problems.by.condition.df
+# --- Bind the results in a single data frame
 
-#Convert them to proportions
-prevalence.par.df [,3:5] <- prevalence.par.df [,3:5]/100
-names (prevalence.par.df)[names(prevalence.par.df) %in% c("percentage", "ci_lower.perc", "ci_upper.perc")] <- c("prop", "ci.lower.prop", "ci.upper.prop")
-
-
-
-#Update the results for deadline problems
-prevalence.par.df [5:6, 3] <- prop.problem.deadline$estimate 
-prevalence.par.df [5:6, 4] <- prop.problem.deadline$conf.int [1] 
-prevalence.par.df [5:6, 5] <- prop.problem.deadline$conf.int [2] 
-prevalence.par.df
-
-
+results.dist.differences <- data.frame (condition = c("within incorrect item issues attended by chat","within other issues attended by chat", "within all cases - including variability from non-significant factors", "within all cases - excluding variability from non-significant factors"))
+merged.results <- bind_rows(dist.differences.ii, dist.differences.oi, dist.differences.total.inc, dist.differences.total.ex)
+results.dist.differences <- cbind (results.dist.differences, merged.results)
+results.dist.differences
 
 ```
 
+We can see that after the correction of the photo issue, it is predicted a reduction of 16% in detractors within incorrect item issues, and a reduction of 0.2% in detractors for other issues. To further evaluate the impact, it would be interesting how these percentages translate within the total of clients we have. 
 
-For each problem across each condition, we calculate the beta and alpha values for the simulation of the prevalence, and keep it in a dataframe. 
+Overall, we would expect 1.65% less detractors after the correction of the issue. 
 
-```{r}
-# Extract the variance of the percentages based on the confidence intervals
-prevalence.par.df$var.prop <- ((prevalence.par.df$ci.upper.prop - prevalence.par.df$ci.lower.prop) / (2 * 1.96)) ^ 2
 
-# Calculate the alpha value
-prevalence.par.df$alpha <- prevalence.par.df$prop * ((prevalence.par.df$prop * (1 - prevalence.par.df$prop) / prevalence.par.df$var.prop) - 1)
 
-# Calculate the beta value
-prevalence.par.df$beta <- (1 - prevalence.par.df$prop) * ((prevalence.par.df$prop * (1 - prevalence.par.df$prop) / prevalence.par.df$var.prop) - 1)
+# Prioritazing Decisions Based on Impact
 
-#Check the results
-prevalence.par.df
-  
-   
-  
-  
-```
+Similarly as it has been done for the correction of photo issues, could be done for other potential issues, so we can compare the expected reduction in total of detractors for the different decisions. Due to space limits, we will just simulate how this comparison could look. 
 
-Now we calculate the prevalences in a simulation of 10000
 
 ```{r}
+# Extract the results for the impact of correcting photo issues
 
-# Function to perform the beta distributions for the prevalence
+impact.across.corrections <- results.dist.differences [ 4, ]
+impact.across.corrections [1,1] <- "Issues loading photos in the chat"
 
-f.beta.simulation <- function (my.n, my.data, my.dv, my.alpha, my.beta) {
-  
-  # Create a list to keep the results
-  results <- list ()
-  p <- 1
-  
-  # Extract the names of the dvs
-  dv.names <- unique (my.data[[my.dv]])
-  
-  # Open a loop for each dv
-  for (dv in dv.names) {
-    
-    #Extract the parameters
-    current.alpha <- my.data[my.data[[my.dv]] == dv, my.alpha]
-    current.beta <- my.data[my.data[[my.dv]] == dv, my.beta]
+#Introduce made up results to display
+impact.across.corrections [2, ] <- c ("Lag issues in the checking information tool", 1.23, 0.85, 1.55)
+impact.across.corrections [3, ] <- c ("Connectivity issues Drinkland", 0.84, 0.35, 1.35)
+impact.across.corrections [4, ] <- c ("Slow email responses", 0.60, 0.22, 1.01)
 
-    # Simulate a vector that indicates presence of each dv
-    simulated_vector <- rbeta(n = my.n,
-                              shape1 = current.alpha, 
-                              shape2 = current.beta)
-    
-    # Save the results
-    results [[p]] <- simulated_vector
-    p = p + 1
-  }
-  
-  # Bind the results in columns of a single daframe
-  results.df <- data.frame(do.call(cbind, results))
-  column.names <- paste0("prev.", dv.names)
-  names(results.df) <- column.names
-  
-  # Return the dataframe
-  return(results.df)
-}
+#Convert values to numeric
+impact.across.corrections [, 2:4] <- apply(impact.across.corrections[ ,2:4], 2, as.numeric)
+
+rownames(impact.across.corrections) <- NULL
+impact.across.corrections
 
 
 ```
 
 
-And we use the function to simulate the prevalences across the two conditions
-
-```{r}
-# ---- 1. For incorrect item issues
-
-# Create a subset dataframe with the incorrect item parameters
-ii.prevalence.par.df <- prevalence.par.df [prevalence.par.df$factor == "chat_incorrect_item", ]
-ii.prevalence.par.df 
-
-# Apply the function to perform beta distributions
-ii.prevalence.simulation.df <- f.beta.simulation (my.n = n_simulations, 
-                                                  my.data = ii.prevalence.par.df,
-                                                  my.dv = "dep.variable", 
-                                                  my.alpha = "alpha", 
-                                                  my.beta = "beta")
-
-# Merge the simulation of the prevalence and the simulation of the coefficients
-ii.simulation <- cbind(ii.prevalence.simulation.df, simulated_coefficients.df)
-
-# See the results
-head(ii.simulation)
-
-
-# ---- 2. For other issues
-
-# Create a subset dataframe with the incorrect item parameters
-oi.prevalence.par.df <- prevalence.par.df [prevalence.par.df$factor == "chat_other_issues", ]
-oi.prevalence.par.df 
-
-# Apply the function to perform beta distributions
-oi.prevalence.simulation.df <- f.beta.simulation (my.n = n_simulations, 
-                                                  my.data = oi.prevalence.par.df,
-                                                  my.dv = "dep.variable", 
-                                                  my.alpha = "alpha", 
-                                                  my.beta = "beta")
-
-# Merge the simulation of the prevalence and the simulation of the coefficients
-oi.simulation <- cbind(oi.prevalence.simulation.df, simulated_coefficients.df)
-
-# See the results
-head(oi.simulation)
-
-
-
-
-```
-
-
-We can proceed to estimate the probabilities for the present situation
-
-```{r}
-# 1.--- Estimate present probabilities of detractors 
-
-# 1.1 - For incorrect item issues
-ii.simulation$present.prob <- with (ii.simulation, {
-  1 / (1 + exp (-1*(coef.X.Intercept.+
-                      prev.problem.photo * coef.problem.photo +
-                      prev.problem.info * coef.problem.info + 
-                      prev.problem.deadline * coef.problem.deadline)))
-})
-
-# 1.2 - For other issues
-oi.simulation$present.prob <- with (oi.simulation, {
-  1 / (1 + exp (-1*(coef.X.Intercept.+
-                      prev.problem.photo * coef.problem.photo +
-                      prev.problem.info * coef.problem.info + 
-                      prev.problem.deadline * coef.problem.deadline)))
-})
-
-
-# 2.--- Estimate predicted probabilities after correcting for photo problems 
-
-# 1.1 - For incorrect item issues
-ii.simulation$predicted.prob.photo <- with (ii.simulation, {
-  1 / (1 + exp (-1*(coef.X.Intercept.+
-                      prev.problem.photo * 0 +
-                      prev.problem.info * coef.problem.info + 
-                      prev.problem.deadline * coef.problem.deadline)))
-})
-
-# 1.2 - For other issues
-oi.simulation$predicted.prob.photo <- with (oi.simulation, {
-  1 / (1 + exp (-1*(coef.X.Intercept.+
-                      prev.problem.photo * 0 +
-                      prev.problem.info * coef.problem.info + 
-                      prev.problem.deadline * coef.problem.deadline)))
-})
-
-
-
-```
-
-
+We can also visualize these results in dot-and-whisker plot: 
 
 
 ```{r}
-f.detractors <- with(data.ch.i, table(detractor, condition))
-prop.f.detractors <-prop.table(f.detractors, margin = 2)
-f.detractors
-prop.f.detractors
-
-```
-
-
-
-
-
-
-
-
-SEGUIR AQUÍ: Preguntar a AI si es correcto multiplicar por los coeficients por las probabilidades, en lugar de por la presencia o no de casos. Parece que lo que estamos simulando son posibles resultados poblacionales. 
-
-
-
-
-```{r}
-
-# Inicializa un data frame para guardar los resultados finales
-resultados_simulacion <- data.frame(
-  reduccion_photo = numeric(10000),
-  reduccion_info = numeric(10000),
-  reduccion_deadline = numeric(10000)
-)
-
-# El bucle de simulación
-for (i in 1:10000) {
-  
-  # Paso 1: Generar un conjunto de coeficientes para esta iteración
-  # (Ya hiciste esto y lo guardaste en 'simulated_coefficients')
-  coef_simulados <- simulated_coefficients[i, ]
-  
-  # Paso 2: Generar un valor de prevalencia simulado para cada problema
-  #         y cada condición, usando los parámetros alpha y beta.
-  prev_photo_incorrect_sim <- rbeta(1, prevalence.par.df$alpha[1], prevalence.par.df$beta[1])
-  prev_photo_other_sim <- rbeta(1, prevalence.par.df$alpha[2], prevalence.par.df$beta[2])
-  # Repite para los otros problemas...
-  prev_info_incorrect_sim <- rbeta(1, prevalence.par.df$alpha[3], prevalence.par.df$beta[3])
-  prev_info_other_sim <- rbeta(1, prevalence.par.df$alpha[4], prevalence.par.df$beta[4])
-  prev_deadline_sim <- rbeta(1, prevalence.par.df$alpha[5], prevalence.par.df$beta[5])
-  
-  # Ahora que tienes los coeficientes y las prevalencias simuladas,
-  # puedes pasar al cálculo.
-  
-  # --- Paso 3: Cálculo de la probabilidad de detractor en el ESCENARIO ACTUAL ---
-  # Calcula la probabilidad en el subgrupo 'incorrect items'
-  prob_detractor_i_actual <- 1 / (1 + exp(-(
-    coef_simulados["(Intercept)"] +
-    coef_simulados["problem.photo"] * prev_photo_incorrect_sim +
-    coef_simulados["problem.info"] * prev_info_incorrect_sim +
-    coef_simulados["problem.deadline"] * prev_deadline_sim
-  )))
-  # ...y para el subgrupo 'other issues'
-  prob_detractor_o_actual <- 1 / (1 + exp(-(
-    coef_simulados["(Intercept)"] +
-    coef_simulados["problem.photo"] * prev_photo_other_sim +
-    coef_simulados["problem.info"] * prev_info_other_sim +
-    coef_simulados["problem.deadline"] * prev_deadline_sim
-  )))
-  
-  # Calcula el porcentaje total de detractores actual (ponderando)
-  porc_detractor_total_actual <- (prob_detractor_i_actual * 0.10) + (prob_detractor_o_actual * 0.30)
-  
-  # --- Paso 4: Calcular la probabilidad en los ESCENARIOS CORREGIDOS ---
-  # Escenario 1: Corregir problem.photo (prevalencia = 0)
-  prob_detractor_i_photo <- 1 / (1 + exp(-(
-    coef_simulados["(Intercept)"] +
-    coef_simulados["problem.photo"] * 0 + # Aquí la prevalencia es 0
-    coef_simulados["problem.info"] * prev_info_incorrect_sim +
-    coef_simulados["problem.deadline"] * prev_deadline_sim
-  )))
-  prob_detractor_o_photo <- 1 / (1 + exp(-(
-    coef_simulados["(Intercept)"] +
-    coef_simulados["problem.photo"] * 0 + # Aquí la prevalencia es 0
-    coef_simulados["problem.info"] * prev_info_other_sim +
-    coef_simulados["problem.deadline"] * prev_deadline_sim
-  )))
-  porc_detractor_total_photo <- (prob_detractor_i_photo * 0.10) + (prob_detractor_o_photo * 0.30)
-  
-  # ...y lo mismo para los escenarios de corrección de problem.info y problem.deadline.
-  
-  # --- Paso 5: Calcular y guardar las reducciones porcentuales ---
-  reduccion_photo <- ((porc_detractor_total_actual - porc_detractor_total_photo) / porc_detractor_total_actual) * 100
-  resultados_simulacion$reduccion_photo[i] <- reduccion_photo
-  # ...y lo mismo para las otras reducciones.
-}
-
-# Al final del bucle, los percentiles 2.5 y 97.5 de las columnas en 'resultados_simulacion'
-# te darán tu intervalo de confianza del 95%.
-
-
-```
-
-
-
-
-
-
-
-To understand what is the impact that this photo issue is having on the total detractors we have in customer service, we have to consider two pieces of information: 
-- Estimates of the extent to which this problem is present.
-- The estimated relation between the presence of this problem and probability to become detractors (seen in the prior section)
--  
-
-
-
-
-* Estimación de % of detractors en incorrect item issues y otros casos si el problema no estuviera presente: 44.7% en ambos, si, pero de cuánto a cuánto se reduce en cada condición. 
-
-Creo que la solución va a ser simular x casos con la probabilidad de que el problema esté presente (obtenido dle modelo de presencia y su CI), y x casos la diferencia porcentual del efecto (con sus CI). Estos valores se multiplicarán uno por el otro. De esta manera tendremos los intervalos de confianza
-
-
-
-
-
-
-
-
-SEGUIR ADAPTANDO EL CÓDIGO: 
-
-- Calcular el impacto total. 
-- Seguimiento temporal. 
-- Recoger distintos gráficos en el Tookit. - Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, grafico con y sin CI
-
-
-Save the database
- 
-```{r}
-
-write.xlsx(data.ch.i, "Predicting Detractors 2. data.ch.i.xlsx")
-write.xlsx(data.complaints, "Predicting Detractors 2. data.complaints.xlsx")
-
-
-```
- 
-
-Se me ocurre: - Primero utilizar una simulación con bootstraping the x casos (e.g., 100000) donde simulemos la presencia del problema en cada subgrupo (i.e., en el subgrupo de chat incorrect items, y en el subgrupo de chat other issues). Para ello usaríamos el porcentaje de la presencia estimado y su CI. - Simular también el efecto asociado para cada uno de los casos anteriores, usando la estimación de la reducción de detractores y su CI. - Multiplicar para cada uno de los 10000 casos el efecto por la presencia, obteniendo de esta manera una distribución de nuestras estimaciones de la probabilidad de reducir detractores dentro de cada subgrupo (e.g., dentro de chat incorrect items). Así podemos obtener la reducción de detractores dentro de ese subgrupo y su intervalo de confianza. - Ponderar ese número por el porcentaje de casos que ese subgrupo representa en el total de casos de customer service, por ejemplo por .10 para chat incorrect item issues. 
-
-
-Se me ocurre: - 1. Para tener en cuenta la prevalencia de los problemas: utilizar una simulación con bootstraping the x casos (e.g., 100000) donde simulemos la presencia de cada problema en cada subgrupo (i.e., en el subgrupo de chat incorrect items, y en el subgrupo de chat other issues). Para cada problema,  usaríamos el porcentaje de la presencia estimado y su CI obtenidos a partir de un modelo de regresion logística en el que se predigan los detractores a partir del problema y otros factores contextuales (país, contexto) que sean significativos en dicha predicción.  
-
- - 2. Para tener en cuenta el efecto de los problemas en los detractores. Utilizar mi modelo de regresión para calcular el incremento porcentual de detractores asociados a la presencia de cada problema, y sus ci. Simular también 10000 casos de esas estimaciones de incremento porcentual en detractores. 
- 
- - 3. Para obtener la reducción porcentual en cada contexto que haya sido significativo en la prevalencia de cada probema: Multiplicar para cada uno de los 10000 casos simulados de la presencia por uno de los 10000 casos simulados para el efecto de la presencia del problema en los detractores. Obtener con ello la reducción de detractores dentro de ese subgrupo y su intervalo de confianza. 
- 
- - 4. Para tener en cuenta el número de casos totales asociados a cada contexto: Ponderar el resultado anterior por el porcentaje de casos que ese subgrupo representa en el total de casos de customer service, por ejemplo por .10 para chat incorrect item issues. 
-
-
-
-```{r}
-set.seed(123) # para reproducibilidad
-
-#####
-# 1. Inputs: estimaciones conocidas
-#####
-
-# Presencia del problema de fotos (% y CI por subgrupo)
-# Ejemplo: 40% en incorrect items (CI 30–50%), 5% en other issues (CI 1–10%)
-p.incorrect.mean <- 0.40
-p.incorrect.low  <- 0.30
-p.incorrect.high <- 0.50
-
-p.other.mean <- 0.05
-p.other.low  <- 0.01
-p.other.high <- 0.10
-
-# Tamaño relativo de cada subgrupo en el total de casos
-w.incorrect <- 0.10  # 10% de los casos de CS
-w.other     <- 0.30  # 30% de los casos de CS
-
-# Efecto estimado sobre detractores (diferencia en probabilidad de ser detractor)
-# Ejemplo: +45pp (CI: +35 a +55)
-effect.mean <- 0.45
-effect.low  <- 0.35
-effect.high <- 0.55
-
-
-#####
-# 2. Preparar funciones auxiliares
-#####
-
-# Función para obtener parámetros de una Beta a partir de media e intervalo
-beta_params <- function(mean, low, high, conf = 0.95) {
-  # aproximación usando var ≈ ((upper-lower)/(2*1.96))^2
-  se <- (high - low) / (2 * qnorm(1 - (1 - conf)/2))
-  var <- se^2
-  alpha <- ((1 - mean) / var - 1 / mean) * mean^2
-  beta <- alpha * (1 / mean - 1)
-  return(list(alpha = alpha, beta = beta))
-}
-
-# Simulación con Beta
-sim_beta <- function(mean, low, high, n = 10000) {
-  pars <- beta_params(mean, low, high)
-  rbeta(n, pars$alpha, pars$beta)
-}
-
-# Simulación del efecto (diferencia de probabilidad), usando normal truncada en [0,1]
-sim_effect <- function(mean, low, high, n = 10000) {
-  se <- (high - low) / (2 * qnorm(0.975))
-  vals <- rnorm(n, mean, se)
-  vals[vals < 0] <- 0
-  vals[vals > 1] <- 1
-  return(vals)
-}
-
-
-#####
-# 3. Simulación Monte Carlo
-#####
-
-n.sim <- 10000
-
-# Presencia del problema en cada subgrupo
-p.incorrect <- sim_beta(p.incorrect.mean, p.incorrect.low, p.incorrect.high, n.sim)
-p.other     <- sim_beta(p.other.mean, p.other.low, p.other.high, n.sim)
-
-# Efecto en detractores
-effect <- sim_effect(effect.mean, effect.low, effect.high, n.sim)
-
-# Reducción esperada de detractores en cada subgrupo
-red.incorrect <- p.incorrect * effect
-red.other     <- p.other * effect
-
-# Reducción total ponderada
-red.total <- w.incorrect * red.incorrect + w.other * red.other
-
-
-#####
-# 4. Resultados resumidos
-#####
-
-summary_stats <- function(x) {
-  c(mean = mean(x),
-    low  = quantile(x, 0.025),
-    high = quantile(x, 0.975))
-}
-
-impact.incorrect <- summary_stats(red.incorrect)
-impact.other     <- summary_stats(red.other)
-impact.total     <- summary_stats(red.total)
-
-impact.incorrect
-impact.other
-impact.total
-```
-
-  
-
-The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues. 
-
-This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items. 
-
-We further check if this difference in the distribution of problems is statistically significant, using a chi-square test. Also, since some expected frequencies were below 5, Fisher’s exact test was also conducted as a robustness check. 
-
-```{r}
-# Perform the chi-square test 
-chisq.test(table.problems)
-#Perform the Fisher test
-fisher.test(table.problems)
-
-```
-
-Both the chi-square test and Fisher’s exact test confirmed that the distribution of slow resolution problems significantly differed between incorrect item cases and other issues, supporting the idea that incorrect item complaints are uniquely shaped by the requirement of uploading photos.
-
-
-### 5.3.2.1 Exploring the Correspondence of Additional Complaints and Specific Problems
-
-In order to disentangle whether the larger number of slow resolution complaints in incorrect item cases is mainly driven by photo upload problems, we integrate the coding of complaint type with the presence/absence of slow resolution complaints. This allows us to visualize both the absolute and relative contribution of each type of problem across conditions. 
-
-We first create a variable that integrates both the presence of complaints and the type of probelem complained about
-
-```{r}
-# Create a factor variable that indicates both the presence of complaints and the problems in the complaints
-data.ch.i$sp.solve.problem.c <- as.character(data.ch.i$sp.solve.problem)
-data.ch.i$sp.solve.problem.c [data.ch.i$complain.sp.solve == 0] <- "No slow resolution complain"
-data.ch.i$sp.solve.problem.c <- factor (data.ch.i$sp.solve.problem.c, levels = c("No slow resolution complain", "Difficulties loading photos","Unespecific", "Slow information check"))
-
-
-#Check if the recodification worked as expected
-summary(data.ch.i)
-
-```
-
-Then we specify a function to obtain the percentages of each category of a dependent variable  across all the levels of our factor, and the binomial 95% confidence intervals
-
-```{r}
-f.prop.multicategory.1f <- function(my.data, my.dv, my.factor){
-  
-  # Initialize an empty list to store the sampled subsets from each stratum.
-  results <- list() 
-  
-  # Initialize a counter for indexing elements in the 'results' list.
-  p <- 1 
-  
-  # Obtain the levels of the dependent variable and the factor
-  dv.levels <- unique (my.data[[my.dv]])
-  f.levels <- unique (my.data[[my.factor]])
-  
-  #Create a loop for each factor level
-    for (fl in f.levels){
-      
-    #Extract the vector and clean for missing cases
-    current.vector <- my.data[my.data[[my.factor]]== fl, my.dv]
-    current.vector.c <- current.vector[!is.na(current.vector)] #cleaning missing cases
-      
-      #Create a loop for each dv level  
-      for (dvl in dv.levels){
-          
-      # Extract the successes and number of cases
-      n <- length(current.vector.c) # number of cases in the vector
-      s <- length(current.vector.c[current.vector.c == dvl]) # number of cases satisfying the condition
-          
-          # Calculate proportions and their 95% CI
-          if(n > 0){
-            proportion <- s / n #calculating proportions
-            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
-            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
-            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
-          }else{
-            proportion <- NA
-            ci_lower <- NA
-            ci_upper <- NA
-          }
-
-          # Save the results in a named vector
-          results [[p]] <- data.frame(factor = fl, dv.level = dvl, percentage = proportion * 100, 
-                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
-          p <- p + 1 
-          
-
-      } # close the loop for the dv levels
-    } # close the loop for the factor levels
-
-  #Combine the results in a dataframe and convert outcomes to numeric columns
-  results.df <- (do.call(rbind, results))
-  rownames(results.df) <- NULL
-
-  #Return the dataframe
-  return(results.df)
-}
-
-```
-
-
-Then we apply the function to our dependent variable - the presence and type of slow resolution complaints - and to our factor - chat attention to incorrect item cases or to other cases. 
-
-```{r}
-complaints.problems.df <- f.prop.multicategory.1f(data.ch.i, "sp.solve.problem.c", "condition")
-complaints.problems.df
-
-```
-
-
-```{r}
-
-# Specify the order for the presentation of the dv levels
-
-complaints.problems.df$dv.level <- factor(complaints.problems.df$dv.level, levels = c("No slow resolution complain", "Difficulties loading photos","Unespecific", "Slow information check"))
-
-# Gráfico con barras apiladas proporcionales usando tu dataframe
-ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
-  geom_col(position = "stack", width = 0.6) +
-
-  # Etiquetas de ejes y título
-  labs(x = "Condition",
-       y = "% of Cases",
-       fill = "Problem type",
-       title = "Distribution of Problems in Slow Resolution Complaints") +
-  
-  # Renombrar condiciones
-  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
-                              "chat_other_issues" = "Other issue")) +
-  
-  # Colores manuales
-  scale_fill_manual(values = c(
-    "No slow resolution complain" = "grey95",      
-    "Difficulties loading photos" = "antiquewhite4", 
-    "Slow information check" = "antiquewhite1",      
-    "Unespecific" = "antiquewhite3"                  
-  )) +
-  
-  theme_minimal(base_size = 14)
-
-
-```
-
-
-```{r}
-ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
-                position = position_dodge(width = 0.8),
-                width = 0.2, color = "black") +
-  labs(x = "Condition",
-       y = "% of Cases",
-       fill = "Complaint type",
-       title = "Distribution of slow resolution complaint types across conditions") +
-  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
-                              "chat_other_issues" = "Other issue")) +
-  scale_fill_manual(values = c(
-    "No slow resolution complain" = "grey95",
-    "Difficulties loading photos" = "antiquewhite4",
-    "Slow information check" = "antiquewhite1",
-    "Unespecific" = "antiquewhite3"
-  )) +
-  theme_minimal(base_size = 14)
-
-```
-
-
-
-SEGUIR ADAPTANDO EL CÓDIGO: 
-- Guardar estas gráficas y procedimientos: para cuando hay variables multicategóricas, para ponerlo con y sin CI
-- Reescribir: 
-  - simular los datos para que las categorías no sean excluyentes. 
-  - ver si hay diferencias con chi cuadrados entre las condiciones. utilizar una fórmula de agrupación, como by
-  - aplicar fórmula de variables dicotómicas y su representación gráfica (reutilizar de antes). 
-  - recodificar las variable a una sola de tal manera que pueda ver la contribución del problema de las photos, siguiendo el gráfico que hay he hecho aquí. 
-
-- Modelar el impacto de las distintas quejas. 
-
-  
-
-
-
-
-
-
-```{r}
-
-# Obtain the frequency table
-table.problems.c <- with (complaints.problems.df, table(sp.solve.problem.c, condition))
-table.problems.c
-
-#Mark the order of the condition variable
-data.ch.i$condition <- factor (data.ch.i$condition, levels = c("chat_incorrect_item", "chat_other_issue"))
-
-#Graph the distribution across conditions
-ggplot(data.ch.i, aes(x = condition, fill = sp.solve.problem.c)) +
-  geom_bar(position = "fill") +
-  scale_y_continuous(labels = scales::percent) +
-  labs(x = "Condition",
-       y = "% of Cases",
-       fill = "Complaint type",
-       title = "Distribution of slow resolution complaint types across conditions") + 
-  scale_x_discrete(labels = c ("Incorrect item", "Other issue")) +
-  scale_fill_manual(values = c(
-    "No slow resolution complain" = "grey95",  # gris muy claro
-    "Difficulties loading photos" = "antiquewhite4", # verde
-    "Slow information check" = "antiquewhite1",      # naranja
-    "Unespecific" = "antiquewhite3"                  # violeta
-  )) +
-      theme_minimal()
-
-
-
-```
-
-
-
-
-
-
-
-```{r}
-
-# Obtain the frequency table
-table.problems.c <- with (data.ch.i, table(sp.solve.problem.c, condition))
-table.problems.c
-
-#Mark the order of the condition variable
-data.ch.i$condition <- factor (data.ch.i$condition, levels = c("chat_incorrect_item", "chat_other_issue"))
-
-#Graph the distribution across conditions
-ggplot(data.ch.i, aes(x = condition, fill = sp.solve.problem.c)) +
-  geom_bar(position = "fill") +
-  scale_y_continuous(labels = scales::percent) +
-  labs(x = "Condition",
-       y = "% of Cases",
-       fill = "Complaint type",
-       title = "Distribution of slow resolution complaint types across conditions") + 
-  scale_x_discrete(labels = c ("Incorrect item", "Other issue")) +
-  scale_fill_manual(values = c(
-    "No slow resolution complain" = "grey95",  # gris muy claro
-    "Difficulties loading photos" = "antiquewhite4", # verde
-    "Slow information check" = "antiquewhite1",      # naranja
-    "Unespecific" = "antiquewhite3"                  # violeta
-  )) +
-      theme_minimal()
-
-
-
-
-
-
-```
-```{r}
-ggplot(data.ch.i, aes(x = condition, fill = sp.solve.problem.c)) +
-  geom_bar(position = "fill") +
-  scale_y_continuous(labels = scales::percent) +
-  labs(x = "Condition",
-       y = "Proportion",
-       fill = "Complaint type",
-       title = "Distribution of slow resolution complaint types across conditions") + 
-  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item", 
-                              "chat_other_issues" = "Other issue")) +
-  scale_fill_manual(values = c(
-    "No slow resolution complain" = "grey90",  # gris muy claro
-    "difficulties_loading_photos" = "#1b9e77", # verde
-    "slow_information_check" = "#d95f02",      # naranja
-    "unespecific" = "#7570b3"                  # violeta
-  )) +
-  theme_minimal()
-
-```
-
-
-```{r}
-
-# Plotting the bar graph
-ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
-    position = position_dodge(width = 0.8),
-    width = 0.2
-  ) +
-  facet_wrap(~ dep.variable, 
-             scales = "fixed", 
-             axes = "all", 
-             labeller = labeller(dep.variable = custom_titles)) +
+# Create the dot-and-whisker plot
+ggplot(impact.across.corrections, aes(x = dif,
+                                      y = reorder(condition, dif))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
+  geom_errorbarh(aes(xmin = lower.ci, xmax = upper.ci), height = 0.2) +
+  geom_point(size = 3) +
+  geom_text(aes(label = paste(round(dif, 1), "%")),
+            vjust = -1, size = 3.5) +
   labs(
-    y = "% of Complaints",
-    fill = "Country",
-    title = "% of Chat Complaints by Issue Type"
+    title = "Expected Impact of Correcting Each Problem",
+    x = "% of Less Detractors",
+    y = "Problems"
   ) +
-  scale_x_discrete(labels = c ("incorrect item", "other issue")) +
-  ylim(0, 100) +  
-  geom_text(
-    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
-    position = position_dodge(width = 0.8),   # match the dodge of bars
-    vjust = -3,                             # slightly above the bar
-    size = 2.5                                # text size
-  ) +
-  theme_minimal(base_size = 12) +
+  theme_minimal() +
   theme(
-    axis.title.x = element_blank(),
-    legend.position = c(1, 0),
-    legend.justification = c("right", "bottom"),
-    legend.title = element_text(size = 10, face = "bold"),
-    legend.text  = element_text(size = 10),
-    panel.spacing = unit(1, "lines"),
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    strip.text = element_text(face = "bold"),
-    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
-    plot.margin = margin(10, 5, 10, 5)
+    plot.title = element_text(face = "bold", hjust = 0.5, margin = margin(b = 40)),
+    plot.title.position = "plot", # To center the title on the whole area
+    axis.title.y = element_text(angle = 90, size = 12, face = "bold", margin = margin(r = 20)),
+    axis.title.x = element_text(angle = 0, size = 12, face = "bold", margin = margin(t = 20))
   )
 ```
 
 
 
-SEGUIR AQUÍ:
-- Graficar la frecuencia en ambas condiciones: un gráfico de barras con categorías distribuidas entre 0 y 100 en la misma barra. 
-- Modelar la influencia de corregir el issue: 
-  - Modelando el impacto de las quejas en la creación de detractores (¿puedo incluir quejas generales de sp.solve para ver si su efecto es significativo tras incluir las quejas específicas...?, no creo que sea posible, pues es una variable que está totalmente contenida en las quejas específicas. Parece no necesario)
-  - Simular una base de datos con valores predichos al caso de que se eliminen los problemas
-  
 
 
-
-
-
-
-
-```{r}
-library(ggplot2)
-library(RColorBrewer)
-
-ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
-    position = position_dodge(width = 0.8),
-    width = 0.2
-  ) +
-  geom_text(
-    aes(label = sprintf("%.1f%%", percentage)),
-    position = position_dodge(width = 0.8),
-    vjust = -0.5,
-    size = 3
-  ) +
-  facet_wrap(~ dep.variable, scales = "free_y") +
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    x = "Método",
-    y = "Porcentaje (%)",
-    fill = "Razón de queja",
-    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    strip.text = element_text(face = "bold"),
-    legend.position = "bottom"
-  )
-
-
-```
-
-
-
-```{r}
-library(ggplot2)
-library(RColorBrewer)
-
-ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
-    position = position_dodge(width = 0.8),
-    width = 0.2
-  ) +
-  geom_text(
-    aes(label = sprintf("%.1f%%", percentage)),
-    position = position_dodge(width = 0.8),
-    vjust = -0.5,
-    size = 3
-  ) +
-  facet_wrap(~ dep.variable, scales = "free_y") +
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    x = "Método",
-    y = "Porcentaje (%)",
-    fill = "Razón de queja",
-    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    strip.text = element_text(face = "bold"),
-    legend.position = "bottom",
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-
-
-```
-
-Make the graph
-
-
-
-```{r, fig.width=8, fig.height=10}
-
-
-ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
-    position = position_dodge(width = 0.8),
-    width = 0.2
-  ) +
-  geom_text(
-    aes(label = sprintf("%.1f%%", percentage)),
-    position = position_dodge(width = 0.8),
-    hjust = -0.7,  # en horizontal cambiamos de vjust -> hjust
-    size = 3
-  ) +
-  facet_wrap(~ dep.variable, scales = "free_y") +
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    x = "Método",
-    y = "Porcentaje (%)",
-    fill = "Razón de queja",
-    title = "Porcentajes e IC 95% por variable dependiente, método y razón"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    strip.text = element_text(face = "bold"),
-    legend.position = "bottom"
-  ) +
-  coord_flip()
-
-
-```
-
-
-```{r}
-
-```
 
