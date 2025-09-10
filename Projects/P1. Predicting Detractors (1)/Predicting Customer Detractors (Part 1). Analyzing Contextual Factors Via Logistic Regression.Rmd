@@ -1350,3 +1350,9 @@ However, we do not yet know the specific issues customers encounter within each 
 
 
 
+To finalize, save the database: 
+
+```{r}
+write.xlsx(data, "Predicting Detractors 1.data.xlsx")
+```
+

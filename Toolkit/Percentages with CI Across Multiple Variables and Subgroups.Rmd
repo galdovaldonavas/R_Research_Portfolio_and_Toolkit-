@@ -42,6 +42,8 @@ data.ch.i <- read.xlsx("Predicting Detractors 2. data.ch.i.xlsx")
 
 # 1. Proportions for Lists of Dichotomous DVs
 
+
+
 ## Proportions for a List of Dicotomous Variables Across 1 Fixed Factor
 
 * Expected Outcome: a dataframe with columns for percentages and 95% CI limits for all dvs and subgroups specified by the factor
@@ -87,7 +89,7 @@ f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
 
           # Save the results in a named vector
           results [[p]] <- data.frame(dep.variable = dv, factor = lf, percentage = proportion * 100, 
-                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, n.cases = n, stringsAsFactors = FALSE)
           p <- p + 1 
           
       } # close the loop for the factor

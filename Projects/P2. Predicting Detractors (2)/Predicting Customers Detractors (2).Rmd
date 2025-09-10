@@ -73,6 +73,13 @@ data.n <- 40000  # Large enough to allow subgroup analysis despite unbalanced ca
 # Initialize dataframe with IDs
 data <- data.frame(id = factor(1:data.n))
 
+# Simulate the date of the evaluation
+data$date <- sample(seq(from = as.Date("2024-01-01"), to = as.Date("2024-07-31"), by = "day"), 
+                    size = data.n, 
+                    replace = TRUE)
+
+
+
 
 # ------ 1. Demographic Information and Contextual Variables
 
@@ -1451,7 +1458,7 @@ Application for the present situation:
 
 ```{r}
 # Apply the formula
-sim.present <- f.bootstrap.predictions (my.n = 5000,
+sim.present <- f.bootstrap.predictions (my.n = 100,
                         my.model = m.problems.sp.solve2, 
                         my.data = data.ch.i, 
                         my.factor = "condition")
@@ -1470,7 +1477,7 @@ data.corrected <- data.ch.i
 data.corrected$problem.photo <- 0
 
 # Apply the formula
-sim.photo.corrected <- f.bootstrap.predictions (my.n = 5000,
+sim.photo.corrected <- f.bootstrap.predictions (my.n = 100,
                         my.model = m.problems.sp.solve2, 
                         my.data = data.corrected, 
                         my.factor = "condition")
@@ -1665,6 +1672,459 @@ ggplot(impact.across.corrections, aes(x = dif,
     axis.title.y = element_text(angle = 90, size = 12, face = "bold", margin = margin(r = 20)),
     axis.title.x = element_text(angle = 0, size = 12, face = "bold", margin = margin(t = 20))
   )
+```
+
+
+## Following Up the Predictions
+
+As in many predictions in social science and UX research, our predictions depends on many factors on out of our control, so it is specially important to continue evaluating the extent to which the predicted improvements were unfulfilled, fulfilled, or even overpassed. That way we can continue discovering new factors of influence and gain awareness about our potential to improve KPIs. 
+
+We will focus on following up our prediction about correcting the issue of loading photos, assuming it was corrected on November 1th
+
+### Simulating the data after the project
+
+We follow the same algorithms than for creating the data of the first semester used in the analyses, but reducing the complains slow resolution from November 1th. 
+
+
+```{r}
+
+
+# Define dataset size 
+data.semester2.n <- 40000  # Large enough to allow subgroup analysis despite unbalanced category probabilities
+
+# Initialize dataframe with IDs
+data.semester2 <- data.frame(id = factor((data.n + 1):(data.n + data.semester2.n)))
+
+# Simulate the date of the evaluation
+data.semester2$date <- sample(seq(from = as.Date("2024-08-01"), to = as.Date("2024-12-31"), by = "day"), 
+                    size = data.semester2.n, 
+                    replace = TRUE)
+
+
+# ------ 1. Demographic Information and Contextual Variables
+
+# Simulate age with a log-normal distribution, capped between 15 and 90
+data.semester2$age <- round(rlnorm(n = data.semester2.n, meanlog = log(40), sdlog = log(1.4)))
+data.semester2$age[data.semester2$age > 90] <- 90
+data.semester2$age[data.semester2$age < 15] <- 15
+
+# Simulate gender
+data.semester2$gender <- factor(sample(c("man", "woman"),
+                             prob = c(0.5, 0.5),
+                             replace = TRUE, size = data.semester2.n))
+
+# Simulate reason for contacting
+data.semester2$reason <- factor(sample(c("incorrect_item", "delay", "status", "cancellation", "other"),
+                             prob = c(0.20, 0.30, 0.20, 0.10, 0.20),
+                             replace = TRUE, size = data.semester2.n))
+
+# Simulate contact method
+data.semester2$method <- factor(sample(c("chat", "web_form", "email", "phone"),
+                             prob = c(0.40, 0.10, 0.15, 0.35),
+                             replace = TRUE, size = data.semester2.n))
+
+# Simulate country (two fictional countries for anonymity)
+data.semester2$country <- factor(sample(c("Drinkland", "Eatland"),
+                              prob = c(0.5, 0.5),
+                              replace = TRUE, size = data.semester2.n))
+
+
+
+# ------ 3. Customer Complaints
+
+## Complaints about connection issues
+# Base probability of a connection complaint: 10%
+prob_connection <- rep(0.10, data.semester2.n)
+# In Drinkland, probability is doubled
+prob_connection[data.semester2$country == "Drinkland"] <- prob_connection[data.semester2$country == "Drinkland"] * 2
+# Ensure probability values remain within [0, 1]
+prob_connection [prob_connection > 1] <- 1
+prob_connection [prob_connection < 0] <- 0
+# Generate binary variable based on probabilities
+data.semester2$complain.connect <- rbinom(n = data.semester2.n, size = 1, prob = prob_connection)
+# Check distribution across countries
+with(data.semester2, prop.table(table(complain.connect, country), margin = 2))
+
+
+## Complaints about slow response
+# Base probability of a slow response complaint: 5%
+prob_slow_response <- rep(0.05, data.semester2.n)
+# Email contacts: 6x higher likelihood
+prob_slow_response[data.semester2$method == "email"] <- prob_slow_response[data.semester2$method == "email"] * 6
+# Chat and web_form: 3x higher likelihood
+prob_slow_response[data.semester2$method %in% c("chat", "web_form")] <- prob_slow_response[data.semester2$method %in% c("chat", "web_form")] * 3
+# Ensure probability values remain within [0, 1]
+prob_slow_response [prob_slow_response > 1] <- 1
+prob_slow_response [prob_slow_response < 0] <- 0
+# Generate binary variable
+data.semester2$complain.sp.respond <- rbinom(n = data.semester2.n, size = 1, prob = prob_slow_response)
+# Check distribution across contact methods
+with(data.semester2, prop.table(table(complain.sp.respond, method), margin = 2))
+
+
+
+```
+
+For complaints about slow resolution we change the code, so that the nps scores of incorrect item cases attended by chat start decreasing on Novemeber 1th until November 30th, when the probability becomes stable in the base probability (10%)
+
+```{r}
+## --- Complaints about slow resolution ---PROBABILITY BASED ON THE DATE
+
+
+## Complaints about slow resolution
+
+
+# Specify the multiplying factor If contact is via chat and reason is incorrect_item before the correction day
+multiplying_factor <- 5
+
+# Specify the day the correction is implemented
+day.correction <- as.Date("2024-10-1")
+
+# Specify the duration of the changing period
+days.change <- 25
+
+# Create a vector that indicates the days passed after the change was implemented
+days.passed <- as.numeric(data.semester2$date - day.correction)
+days.passed [days.passed <= 0] <- 0
+days.passed
+
+# Create a correction factor that, starting from 1 before the correction date, progressively becomes equal to the multiplying factor until reaching the duration of the changing period
+correction_factor <- 1 + (days.passed * (multiplying_factor-1))/ days.change
+correction_factor  [correction_factor > multiplying_factor] <- multiplying_factor
+
+
+# Specify the base probability of a slow resolution complaint: 10%
+prob_slow_resolution <- rep(0.10, data.semester2.n)
+
+# Specify the selection of cases incorrect item cases attended by chat
+is_chat_incorrect <- data.semester2$method == "chat" & data.semester2$reason == "incorrect_item"
+
+# Modify the probability vector based on the parameters above
+prob_slow_resolution[is_chat_incorrect] <- prob_slow_resolution[is_chat_incorrect] * (multiplying_factor / correction_factor[is_chat_incorrect])
+
+# Ensure probability values remain within [0, 1]
+prob_slow_resolution [prob_slow_resolution > 1] <- 1
+prob_slow_resolution [prob_slow_resolution < 0] <- 0
+
+# Generate binary variable
+data.semester2$complain.sp.solve <- rbinom(n = data.semester2.n, size = 1, prob = prob_slow_resolution)
+
+# Check distribution by reason and method
+with(data.semester2, prop.table(table(complain.sp.solve, reason, method), margin = c(2, 3)))
+
+
+        
+```
+
+
+We then continue with the original fashion for the rest of the simulation: 
+
+```{r}
+
+## Complaints about having to repeat information
+# Base probability of a repetition complaint: 2%
+prob_repeat_info <- rep(0.02, data.semester2.n)
+# If contact reason is cancellation → 10x higher likelihood
+prob_repeat_info[data.semester2$reason == "cancellation"] <- prob_repeat_info[data.semester2$reason == "cancellation"] * 10
+# Ensure probability values remain within [0, 1]
+prob_repeat_info [prob_repeat_info > 1] <- 1
+prob_repeat_info [prob_repeat_info < 0] <- 0
+# Generate binary variable
+data.semester2$complain.repeat <- rbinom(n = data.semester2.n, size = 1, prob = prob_repeat_info)
+# Check distribution across contact reasons
+with(data.semester2, prop.table(table(complain.repeat, reason), margin = 2))
+
+
+## Other types of complaints (uniform distribution)
+# Constant probability of 20% for other unspecified complaints
+data.semester2$complain.other <- rbinom(n = data.semester2.n, size = 1, prob = 0.20)
+# Check distribution
+with(data.semester2, prop.table(table(complain.other)))
+
+
+# ------ 3. NPS scores
+
+# Simulate base NPS scores assuming no complaints (mean = 9, sd = 2)
+data.semester2$nps.score <- rnorm(data.semester2.n, mean = 9, sd = 2)
+
+# Apply fixed penalties based on complaints
+# -3 for connection issues
+# -4 for slow response
+# -6 for slow resolution
+# -2 for repeated information
+# -1 for other complaints
+data.semester2$nps.score <- data.semester2$nps.score -
+  3 * data.semester2$complain.connect -
+  4 * data.semester2$complain.sp.respond -
+  6 * data.semester2$complain.sp.solve -
+  2 * data.semester2$complain.repeat -
+  1 * data.semester2$complain.other 
+
+# Ensure scores stay within the 0–10 range
+data.semester2$nps.score[data.semester2$nps.score < 0] <- 0
+data.semester2$nps.score[data.semester2$nps.score > 10] <- 10 
+
+# Convert to integer values (using floor)
+data.semester2$nps.score <- floor(data.semester2$nps.score)
+
+# Add placeholder for open-text comments
+data.semester2$open.comment <- rep("bla bla", data.semester2.n)
+
+# Visualize score distribution
+barplot(table(data.semester2$nps.score), ylab = "Frequency", xlab = "NPS Scores")
+with(data.semester2, prop.table(table(data.semester2$nps.score)))
+
+## Create NPS segments based on score values
+
+data.semester2$nps.segment <- rep(NA_character_, data.semester2.n) # Initialize empty character variable
+
+data.semester2$nps.segment[data.semester2$nps.score <= 6] <- "detractor" 
+data.semester2$nps.segment[data.semester2$nps.score > 6 & data.semester2$nps.score < 9] <- "passive"
+data.semester2$nps.segment[data.semester2$nps.score >= 9] <- "promoter" # Assign segment based on score range
+
+data.semester2$nps.segment <- factor(data.semester2$nps.segment, levels = c("detractor", "passive", "promoter")) # Convert to factor
+
+## Create a binary variable for detractors
+data.semester2$detractor <- NA_real_
+data.semester2$detractor[data.semester2$nps.segment == "detractor"] <- 1
+data.semester2$detractor[data.semester2$nps.segment != "detractor"] <- 0
+
+
+# Step 4: Check distribution across NPS segments
+with(data.semester2, prop.table(table(nps.segment)))
+
+
+#------ Satisfaction scores (1 to 5 scale)
+
+# Generate satisfaction scores based on NPS
+# We use a normal distribution centered at 3, with some variability (sd = 0.5)
+# and add a scaled component based on NPS to simulate a positive relationship.
+data.semester2$satisfaction <- floor(
+  rnorm(data.semester2.n, mean = 3, sd = 0.5) + 
+  0.9 * (1 + as.numeric(scale(data.semester2$nps.score)))
+)
+
+# Ensure scores stay within the 1–5 range
+data.semester2$satisfaction[data.semester2$satisfaction < 1] <- 1
+data.semester2$satisfaction[data.semester2$satisfaction > 5] <- 5
+
+# Visualize the distribution
+barplot(table(data.semester2$satisfaction), xlab = "Satisfaction Scores", ylab = "Frequency")
+with(data.semester2, prop.table(table(satisfaction)))
+
+# Check correlation with NPS scores (Spearman method)
+with(data.semester2, cor(nps.score, satisfaction, method = "spearman"))
+
+# Set satisfaction to missing for Drinkland
+data.semester2$satisfaction[data.semester2$country == "Drinkland"] <- NA_real_
+
+# Set satisfaction to missing for email and web_form contacts
+data.semester2$satisfaction[data.semester2$method %in% c("email", "web_form")] <- NA_real_
+
+# Introduce 10% additional random missingness among remaining valid values
+na_randomizer <- sample(
+  c(0, 1),
+  size = sum(!is.na(data.semester2$satisfaction)),
+  replace = TRUE,
+  prob = c(0.1, 0.9)
+) # Create a random vector (0 = missing, 1 = keep) for non-NA entries
+data.semester2$satisfaction[which(!is.na(data.semester2$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
+with(data.semester2, prop.table(table(is.na(satisfaction), method, country), margin = 2:3)) # Check final distribution
+
+#Check the results for the whole dataset
+str(data.semester2)
+summary(data.semester2)
+
+```
+
+
+Lastly, merge the databases to get a single dataset for the whole year
+
+```{r}
+data.2024 <- bind_rows(data, data.semester2)
+
+
+```
+
+
+### Follow up
+
+
+```{r}
+# Order the data by date
+data.2024 <- data.2024[order(data.2024$date), ]
+
+
+```
+
+```{r}
+# Group dates in weeks
+data.2024$date.week <- as.Date(cut(data.2024$date, "week"))
+```
+
+
+Calculate percentages and CI per week
+
+```{r}
+f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factor
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf in f.levels){
+          
+          # Extract the vector, successes and number of cases
+          current.vector <- my.data[my.data[[my.factor]]==lf, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(dep.variable = dv, factor = lf, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, n.cases = n, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+      } # close the loop for the factor
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+```
+
+
+Apply the function
+
+```{r}
+dv.list = c("detractor")
+
+prop.detractors.by.week <- f.prop.dicdvl.1f (my.data = data.2024,
+                  my.dv.list = dv.list,
+                  my.factor = "date.week")
+
+
+prop.detractors.by.week$factor <- as.Date(prop.detractors.by.week$factor)
+prop.detractors.by.week
+
+
+```
+
+
+
+And we graph it
+
+
+```{r}
+# Fecha de la corrección
+fecha_correccion <- as.Date("2024-09-30")
+
+ggplot(prop.detractors.by.week, aes(x = factor, y = percentage)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+    geom_point(aes(size = n.cases), color = "darkred", alpha = 0.6) +
+  geom_ribbon(aes(ymin = ci_lower.perc, ymax = ci_upper.perc), 
+              alpha = 0.2, fill = "steelblue") +
+  
+  # LÍNEA VERTICAL de la corrección
+  geom_vline(xintercept = fecha_correccion, 
+             color = "red", linewidth = 1, linetype = "dashed") +
+  
+  # ANOTACIÓN de la corrección
+  annotate("text", x = fecha_correccion, y = max(prop.detractors.by.week$percentage, na.rm = TRUE),
+           label = "Correction of\nphoto issues", 
+           hjust = -0.1, vjust = 1.2, color = "red", fontface = "bold", size = 4) +
+  
+  scale_x_date(
+    date_breaks = "1 month", 
+    date_labels = "%b %Y",
+    expand = expansion(mult = c(0.05, 0.15))  # Más espacio a la derecha para la anotación
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  labs(
+    title = "Weekly Evolution in the Percentage of Detractors",
+    x = "Week",
+    y = "Porcentage of Detractors",
+    size = "Number of Cases"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+```{r}
+
+# Fecha de la corrección
+fecha_correccion <- as.Date("2024-09-30")
+
+ggplot(prop.detractors.by.week, aes(x = factor, y = percentage)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+    geom_point(aes(), color = "darkblue", alpha = 0.6) +
+  geom_ribbon(aes(ymin = ci_lower.perc, ymax = ci_upper.perc), 
+              alpha = 0.2, fill = "steelblue") +
+  
+  # LÍNEA VERTICAL de la corrección
+  geom_vline(xintercept = fecha_correccion, 
+             color = "red", linewidth = 1, linetype = "dashed") +
+  
+  # ANOTACIÓN de la corrección
+  annotate("text", x = fecha_correccion, y = max(prop.detractors.by.week$percentage, na.rm = TRUE),
+           label = "Correction of\nphoto issues", 
+           hjust = -0.1, vjust = 1.2, color = "red", fontface = "bold", size = 4) +
+  
+  scale_x_date(
+    date_breaks = "1 month", 
+    date_labels = "%b %Y",
+    expand = expansion(mult = c(0.05, 0.15))  # Más espacio a la derecha para la anotación
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  labs(
+    title = "Weekly Evolution in the Percentage of Detractors",
+    x = "Week",
+    y = "Porcentage of Detractors"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+
+To see the percentages before and after
+
+```{r}
+# Create a dicotomous variable for before and after the correction
+
+data.2024$moment.photo.correction <- NA_character_
+data.2024$moment.photo.correction [data.2024 [data$date < "2024-10-1"] <- "before"
+data.2024$moment.photo.correction [data.2024 [data$date "2024-10-1"] <- "after"
+
+
 ```
 
 
