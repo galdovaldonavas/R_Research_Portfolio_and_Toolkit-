@@ -1,43 +1,38 @@
 ---
-title: "Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities Via Text Analysis"
+title: "Predicting Customer Detractors (Part 2): Opportunity Analysis from Open Feedback"
 output:
   pdf_document: default
   html_document:
     df_print: paged
     self_contained: false
 ---
-Title: Predicting Customer Detractors (Part 2): Discovering Opportunities From Open Feedback
 
 # 1. Introduction
 
-This case study explores opportunities the likelihood to recommend the company customer service from the comments of the customers.
+This case study explores opportunities to increase the likelihood that customers recommend the company’s customer service.
 
-It is a continuation of the project [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), which provided insights on the specific customer service contexts that customers had the lowest probability to recommend. 
+It is a continuation of the project [Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090), which identified the service contexts with the lowest likelihood of recommendation (i.e., contact methods, contact reasons, and countries). Building on those findings, this follow-up project focuses on **understanding the root causes of dissatisfaction** and quantifying the potential benefits of addressing them.
 
-In this phase we prioritized a follow up of those contexts, in which we conducted a thematic anaysis of the open comments left by customers in the NPS survey to identify specific issues that could be corrected. Also this project analyzes the potential impact of correcting these issues. .
-
+Specifically, we conduct a thematic analysis of open-ended feedback from Net Promoter Score (NPS) surveys to identify actionable issues. We then assess the expected impact of solving these problems on customers’ likelihood to recommend.
 
 The analysis includes:
+- Data simulation and cleaning  
+- Exploratory analysis with descriptives and visualizations  
+- Logistic regression modeling  
+- Simulation-based predictions using bootstrapping  
 
-- Data simulation and cleaning
-- Visualization techniques.
-- Descriptive statistics (percentages and confidence intervals)
-- Logistic regression modeling
-- Simulation-based predictions, using bootstrapping techniques
-
-
-Although based on a real-world project, all data, variables, and insights presented here have been simulated to maintain confidentiality.
-
+Although based on a real-world project, all data, variables, and insights presented here have been simulated to ensure confidentiality.
 
 
 # 2. Setup
 
-We start by loading the required packages for data manipulation, visualization, modeling, and exporting results.
+We begin by loading the necessary R packages for data manipulation, visualization, and statistical modeling. 
 
 ```{r}
+
 # Data handling
 library(dplyr)       # Data manipulation
-library(openxlsx)    # Write Excel files
+library(openxlsx)    # Open Excel files
 
 # Visualization
 library(ggplot2)     # General plotting
@@ -45,23 +40,44 @@ library(vcd)         # Mosaic plots
 
 # Statistical analysis
 library(psych)       # Descriptive statistics
-library(car)         # VIF and regression diagnostics
 library(glmnet)      # Penalized logistic regression
-library(boot)        # Bootstrapping
-library(MASS)        # Simulate coefficients from a multivariate normal distribution
+library(boot)        # Bootstrapping procedures
+library(MASS)        # Simulate coefficients from multivariate normal distributions
 
 ```
 
 
+# 3. Review of Prior Results
 
-# 3. Data Simulation
+In the previous study [Predicting Customer Detractors (Part 1)](https://rpubs.com/galdovaldonavas/1335090), we identified several contextual factors in customer service that were associated with higher levels of detractors, i.e., customers less likely to recommend our service.  
 
-The data simulation will be similar to [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), but with a random selection of cases for each of the issues we want to analyze, which was taken in the original project to avoid excessive work coding textual comments.  
+The key findings are summarized in the chart below:
 
 
-## 3.1. Activating the Data from the Prior Section of the Project
+```{r}
+# Import the image of the mosaic graph about the predicted detractors across contextual factors
+knitr::include_graphics("Predicted.Detractors.png")
 
-We first reproduce the original data from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors Via Logistic](https://rpubs.com/galdovaldonavas/1335090), using the code below. For details, please refer to the data simulation section on that project.  
+```
+
+As shown in the figure, customers attended via chat for incorrect item issues had the highest probability of becoming detractors (i.e., providing a score of 6 or lower in the Net Promoter Score).  
+
+Based on this finding, stakeholders and the research team agreed to conduct a follow-up study to identify opportunities for improvement in these cases.  
+
+Specifically, we carried out a thematic analysis of customers’ open feedback in the NPS survey, focusing on two subsamples of chat interactions: (a) customers with incorrect item issues and (b) customers with other issues. This design allows us to isolate the effect of incorrect items within chat interactions, since chat itself is already associated with a higher share of detractors. By holding the contact channel constant, we avoid confounding the results with chat’s general negative impact.
+
+# 4. Data Simulation
+
+The data simulation builds on the dataset activated in [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090).  
+
+From that dataset, we drew random subsamples for the two scenarios of interest to avoid excessive workload in qualitative coding:  
+1. Chat cases involving incorrect item issues.  
+2. Chat cases involving other types of issues.  
+
+## 4.1 Activating the Original Dataset  
+
+To reproduce the dataset from [Part 1](https://rpubs.com/galdovaldonavas/1335090), we follow the same simulation procedure. For full details, please refer to the **Data Simulation** section in that project.
+
 
 ```{r}
 
@@ -78,8 +94,6 @@ data <- data.frame(id = factor(1:data.n))
 data$date <- sample(seq(from = as.Date("2024-01-01"), to = as.Date("2024-07-31"), by = "day"), 
                     size = data.n, 
                     replace = TRUE)
-
-
 
 
 # ------ 1. Demographic Information and Contextual Variables
@@ -110,8 +124,7 @@ data$country <- factor(sample(c("Drinkland", "Eatland"),
                               replace = TRUE, size = data.n))
 
 
-
-# ------ 3. Customer Complaints
+# ------ 2. Customer Complaints
 
 ## Complaints about connection issues
 # Base probability of a connection complaint: 10%
@@ -122,10 +135,7 @@ prob_connection[data$country == "Drinkland"] <- prob_connection[data$country == 
 prob_connection [prob_connection > 1] <- 1
 prob_connection [prob_connection < 0] <- 0
 # Generate binary variable based on probabilities
-data$complain.connect <- rbinom(n = data.n, size = 1, prob = prob_connection)
-# Check distribution across countries
-with(data, prop.table(table(complain.connect, country), margin = 2))
-
+data$complain.connect <- as.integer(rbinom(n = data.n, size = 1, prob = prob_connection))
 
 ## Complaints about slow response
 # Base probability of a slow response complaint: 5%
@@ -138,10 +148,7 @@ prob_slow_response[data$method %in% c("chat", "web_form")] <- prob_slow_response
 prob_slow_response [prob_slow_response > 1] <- 1
 prob_slow_response [prob_slow_response < 0] <- 0
 # Generate binary variable
-data$complain.sp.respond <- rbinom(n = data.n, size = 1, prob = prob_slow_response)
-# Check distribution across contact methods
-with(data, prop.table(table(complain.sp.respond, method), margin = 2))
-
+data$complain.sp.respond <- as.integer(rbinom(n = data.n, size = 1, prob = prob_slow_response))
 
 ## Complaints about slow resolution
 # Base probability of a slow resolution complaint: 10%
@@ -153,10 +160,7 @@ prob_slow_resolution[is_chat_incorrect] <- prob_slow_resolution[is_chat_incorrec
 prob_slow_resolution [prob_slow_resolution > 1] <- 1
 prob_slow_resolution [prob_slow_resolution < 0] <- 0
 # Generate binary variable
-data$complain.sp.solve <- rbinom(n = data.n, size = 1, prob = prob_slow_resolution)
-# Check distribution by reason and method
-with(data, prop.table(table(complain.sp.solve, reason, method), margin = c(2, 3)))
-
+data$complain.sp.solve <- as.integer(rbinom(n = data.n, size = 1, prob = prob_slow_resolution))
 
 ## Complaints about having to repeat information
 # Base probability of a repetition complaint: 2%
@@ -167,16 +171,11 @@ prob_repeat_info[data$reason == "cancellation"] <- prob_repeat_info[data$reason 
 prob_repeat_info [prob_repeat_info > 1] <- 1
 prob_repeat_info [prob_repeat_info < 0] <- 0
 # Generate binary variable
-data$complain.repeat <- rbinom(n = data.n, size = 1, prob = prob_repeat_info)
-# Check distribution across contact reasons
-with(data, prop.table(table(complain.repeat, reason), margin = 2))
-
+data$complain.repeat <- as.integer(rbinom(n = data.n, size = 1, prob = prob_repeat_info))
 
 ## Other types of complaints (uniform distribution)
 # Constant probability of 20% for other unspecified complaints
-data$complain.other <- rbinom(n = data.n, size = 1, prob = 0.20)
-# Check distribution
-with(data, prop.table(table(complain.other)))
+data$complain.other <- as.integer(rbinom(n = data.n, size = 1, prob = 0.20))
 
 
 # ------ 3. NPS scores
@@ -207,31 +206,21 @@ data$nps.score <- floor(data$nps.score)
 # Add placeholder for open-text comments
 data$open.comment <- rep("bla bla", data.n)
 
-# Visualize score distribution
-barplot(table(data$nps.score), ylab = "Frequency", xlab = "NPS Scores")
-with(data, prop.table(table(data$nps.score)))
-
 ## Create NPS segments based on score values
-
 data$nps.segment <- rep(NA_character_, data.n) # Initialize empty character variable
-
 data$nps.segment[data$nps.score <= 6] <- "detractor" 
 data$nps.segment[data$nps.score > 6 & data$nps.score < 9] <- "passive"
 data$nps.segment[data$nps.score >= 9] <- "promoter" # Assign segment based on score range
-
 data$nps.segment <- factor(data$nps.segment, levels = c("detractor", "passive", "promoter")) # Convert to factor
 
 ## Create a binary variable for detractors
 data$detractor <- NA_real_
 data$detractor[data$nps.segment == "detractor"] <- 1
 data$detractor[data$nps.segment != "detractor"] <- 0
+data$detractor <- as.integer(data$detractor)
 
 
-# Step 4: Check distribution across NPS segments
-with(data, prop.table(table(nps.segment)))
-
-
-#------ Satisfaction scores (1 to 5 scale)
+#------ 4. Satisfaction scores (1 to 5 scale)
 
 # Generate satisfaction scores based on NPS
 # We use a normal distribution centered at 3, with some variability (sd = 0.5)
@@ -244,13 +233,6 @@ data$satisfaction <- floor(
 # Ensure scores stay within the 1–5 range
 data$satisfaction[data$satisfaction < 1] <- 1
 data$satisfaction[data$satisfaction > 5] <- 5
-
-# Visualize the distribution
-barplot(table(data$satisfaction), xlab = "Satisfaction Scores", ylab = "Frequency")
-with(data, prop.table(table(satisfaction)))
-
-# Check correlation with NPS scores (Spearman method)
-with(data, cor(nps.score, satisfaction, method = "spearman"))
 
 # Set satisfaction to missing for Drinkland
 data$satisfaction[data$country == "Drinkland"] <- NA_real_
@@ -266,11 +248,13 @@ na_randomizer <- sample(
   prob = c(0.1, 0.9)
 ) # Create a random vector (0 = missing, 1 = keep) for non-NA entries
 data$satisfaction[which(!is.na(data$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
-with(data, prop.table(table(is.na(satisfaction), method, country), margin = 2:3)) # Check final distribution
 
-#Check the results for the whole dataset
-str(data)
+
+# ------ 5. Check the results
 summary(data)
+
+#Check the sample sizes for the two scenarios
+with(data, table(method, reason))
 
 ```
 We can see that the database is created as expected: 
@@ -295,21 +279,6 @@ We can see that the database is created as expected:
 Please note that while we have initially simulated the complain variables for all cases, in the real project this data was not available. They were only available for a sample of cases that we selected within each of the factors we wanted to follow up, once we coded their open comments to identify the complaints. In the next section we simulate the NA cases for the cases that were not selected in that random selection. 
 
 
-# 4. Discussion of Follow Ups Needed Based on Prior Results
-
-In the prior study [Predicting Customer Detractors (Part 1)](https://rpubs.com/galdovaldonavas/1335090), we observed several contextual factors in customer service that are associated with higher levels of detractors, that is, with a lower probability to recommend our service. We summarize these results in the charts below:
-
-```{r}
-# Import the image of the mosaic graph about the predicted detractors across contextual factors
-knitr::include_graphics("Predicted.Detractors.png")
-
-```
-
-Based on the evidence and stakeholder discussions, we prioritize a follow-up on cases handled via chat that involve incorrect item issues, since this factor shows the largest increase in detractors.
-
-To do this, in the next section we will compare complaints in chat cases involving incorrect items versus chat cases involving other issues. This comparison is designed to isolate the negative effects of combining chat with incorrect items, since chat alone is already associated with higher detractors. By keeping the contact channel constant, we avoid confounding the results with chat’s general negative effect.
-
-A broader comparison across all contact channels can be explored in a later phase.
 
 
 # 5. Discovering Opportunities for Incorrect Item Cases Attended Through Chat
