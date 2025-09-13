@@ -62,21 +62,16 @@ knitr::include_graphics("Predicted.Detractors.png")
 
 As shown in the figure, customers attended via chat for incorrect item issues had the highest probability of becoming detractors (i.e., providing a score of 6 or lower in the Net Promoter Score).  
 
-Based on this finding, stakeholders and the research team agreed to conduct a follow-up study to identify opportunities for improvement in these cases.  
+Based on this finding, stakeholders and the research team agreed to conduct a follow-up to compare the customers' complaints in cases attended by chat for incorrect item issues, and cases attended by chat for other issues. study to identify opportunities for improvement in these cases. By holding the contact channel constant (chat), we avoid confounding the results with chat’s general negative impact.
 
-Specifically, we carried out a thematic analysis of customers’ open feedback in the NPS survey, focusing on two subsamples of chat interactions: (a) customers with incorrect item issues and (b) customers with other issues. This design allows us to isolate the effect of incorrect items within chat interactions, since chat itself is already associated with a higher share of detractors. By holding the contact channel constant, we avoid confounding the results with chat’s general negative impact.
 
 # 4. Data Simulation
 
-The data simulation builds on the dataset activated in [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090).  
+## 4.1. Retrieving Data from the Original Dataset of Contextual Factors and NPS Scores
 
-From that dataset, we drew random subsamples for the two scenarios of interest to avoid excessive workload in qualitative coding:  
-1. Chat cases involving incorrect item issues.  
-2. Chat cases involving other types of issues.  
+This project builds on the dataset from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090), which contained information about contact reasons, contact methods, countries, and NPS scores of customers who contacted the customer service. 
 
-## 4.1 Activating the Original Dataset  
-
-To reproduce the dataset from [Part 1](https://rpubs.com/galdovaldonavas/1335090), we follow the same simulation procedure. For full details, please refer to the **Data Simulation** section in that project.
+We apply the code below to retrieve this information (please refer to [Part 1](https://rpubs.com/galdovaldonavas/1335090) for full details in the dataset structure). 
 
 
 ```{r}
@@ -125,6 +120,8 @@ data$country <- factor(sample(c("Drinkland", "Eatland"),
 
 
 # ------ 2. Customer Complaints
+
+# These variables represent underlying complaints that were not available at this stage of the investigation. We use them only to simulate NPS and satisfaction scores and store them in a separate dataframe to reflect their unavailability. They become visible only after thematic coding in the subsamples of interest (see next section).
 
 ## Complaints about connection issues
 # Base probability of a connection complaint: 10%
@@ -250,13 +247,41 @@ na_randomizer <- sample(
 data$satisfaction[which(!is.na(data$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
 
 
-# ------ 5. Check the results
+# ------ 5. Put aside the complaint variables to represent that this information was not available at this point
+
+complains.df <- subset(data, select = c(id, complain.connect, complain.sp.respond, complain.sp.solve, complain.repeat, complain.other))
+data<- subset(data, select = -c(complain.connect, complain.sp.respond, complain.sp.solve, complain.repeat, complain.other))
+
+
+# ------ 6. Check the data was created as expected
 summary(data)
 
-#Check the sample sizes for the two scenarios
-with(data, table(method, reason))
-
 ```
+
+
+
+
+
+
+From that dataset, we need to see if we have enough cases for the two scenarios of interest: 
+1. Chat cases involving incorrect item issues.  
+2. Chat cases involving other types of issues. 
+
+
+```{r}
+
+# ------ 6. Check the number of cases contacting through different contact methods across contact reasons and countries.
+with(data, table(method, reason, country))
+```
+
+
+
+
+
+
+
+
+
 We can see that the database is created as expected: 
 * A variable "id" to identify each of the 40000 customers of the customer service for which we had data. 
 * The variables "age" and "gender" to account for demographics of the customers. 
