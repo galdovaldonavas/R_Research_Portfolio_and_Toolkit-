@@ -16,10 +16,10 @@ It is a continuation of the project [Predicting Customer Detractors (Part 1): An
 Specifically, we conduct a thematic analysis of open-ended feedback from Net Promoter Score (NPS) surveys to identify actionable issues. We then assess the expected impact of solving these problems on customers’ likelihood to recommend.
 
 The analysis includes:
-- Data simulation and cleaning  
-- Exploratory analysis with descriptives and visualizations  
-- Logistic regression modeling  
-- Simulation-based predictions using bootstrapping  
+- Data simulation and cleaning.
+- Exploratory analysis with descriptive statistics and visualizations.  
+- Logistic regression modeling.
+- Simulation-based predictions using bootstrapping. 
 
 Although based on a real-world project, all data, variables, and insights presented here have been simulated to ensure confidentiality.
 
@@ -62,7 +62,7 @@ knitr::include_graphics("Predicted.Detractors.png")
 
 As shown in the figure, customers attended via chat for incorrect item issues had the highest probability of becoming detractors (i.e., providing a score of 6 or lower in the Net Promoter Score).  
 
-Based on this finding, stakeholders and the research team agreed to conduct a follow-up to compare the customers' complaints in cases attended by chat for incorrect item issues, and cases attended by chat for other issues. study to identify opportunities for improvement in these cases. By holding the contact channel constant (chat), we avoid confounding the results with chat’s general negative impact.
+Based on this finding, stakeholders and the research team agreed to conduct a follow-up to compare the customers' complaints in cases attended by chat for incorrect item issues versus cases attended by chat for other issues. By holding the contact channel constant (chat), we avoid confounding the results with chat’s general negative impact.
 
 
 # 4. Data Simulation
@@ -113,15 +113,24 @@ data$method <- factor(sample(c("chat", "web_form", "email", "phone"),
                              prob = c(0.40, 0.10, 0.15, 0.35),
                              replace = TRUE, size = data.n))
 
+# Dummy variables for method (reference: phone)
+data$chat <- ifelse(data$method == "chat", 1, 0)
+data$email <- ifelse(data$method == "email", 1, 0)
+data$web_form <- ifelse(data$method == "web_form", 1, 0)
+
 # Simulate country (two fictional countries for anonymity)
 data$country <- factor(sample(c("Drinkland", "Eatland"),
                               prob = c(0.5, 0.5),
                               replace = TRUE, size = data.n))
 
+data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
 
 # ------ 2. Customer Complaints
 
 # These variables represent underlying complaints that were not available at this stage of the investigation. We use them only to simulate NPS and satisfaction scores and store them in a separate dataframe to reflect their unavailability. They become visible only after thematic coding in the subsamples of interest (see next section).
+
+## Create a dataset to store the complaints in connection to the case id
+data.complaints <- data.frame(id = data$id)
 
 ## Complaints about connection issues
 # Base probability of a connection complaint: 10%
@@ -132,7 +141,7 @@ prob_connection[data$country == "Drinkland"] <- prob_connection[data$country == 
 prob_connection [prob_connection > 1] <- 1
 prob_connection [prob_connection < 0] <- 0
 # Generate binary variable based on probabilities
-data$complain.connect <- as.integer(rbinom(n = data.n, size = 1, prob = prob_connection))
+data.complaints$complain.connect <- as.integer(rbinom(n = data.n, size = 1, prob = prob_connection))
 
 ## Complaints about slow response
 # Base probability of a slow response complaint: 5%
@@ -145,7 +154,7 @@ prob_slow_response[data$method %in% c("chat", "web_form")] <- prob_slow_response
 prob_slow_response [prob_slow_response > 1] <- 1
 prob_slow_response [prob_slow_response < 0] <- 0
 # Generate binary variable
-data$complain.sp.respond <- as.integer(rbinom(n = data.n, size = 1, prob = prob_slow_response))
+data.complaints$complain.sp.respond <- as.integer(rbinom(n = data.n, size = 1, prob = prob_slow_response))
 
 ## Complaints about slow resolution
 # Base probability of a slow resolution complaint: 10%
@@ -157,7 +166,7 @@ prob_slow_resolution[is_chat_incorrect] <- prob_slow_resolution[is_chat_incorrec
 prob_slow_resolution [prob_slow_resolution > 1] <- 1
 prob_slow_resolution [prob_slow_resolution < 0] <- 0
 # Generate binary variable
-data$complain.sp.solve <- as.integer(rbinom(n = data.n, size = 1, prob = prob_slow_resolution))
+data.complaints$complain.sp.solve <- as.integer(rbinom(n = data.n, size = 1, prob = prob_slow_resolution))
 
 ## Complaints about having to repeat information
 # Base probability of a repetition complaint: 2%
@@ -168,11 +177,11 @@ prob_repeat_info[data$reason == "cancellation"] <- prob_repeat_info[data$reason 
 prob_repeat_info [prob_repeat_info > 1] <- 1
 prob_repeat_info [prob_repeat_info < 0] <- 0
 # Generate binary variable
-data$complain.repeat <- as.integer(rbinom(n = data.n, size = 1, prob = prob_repeat_info))
+data.complaints$complain.repeat <- as.integer(rbinom(n = data.n, size = 1, prob = prob_repeat_info))
 
 ## Other types of complaints (uniform distribution)
 # Constant probability of 20% for other unspecified complaints
-data$complain.other <- as.integer(rbinom(n = data.n, size = 1, prob = 0.20))
+data.complaints$complain.other <- as.integer(rbinom(n = data.n, size = 1, prob = 0.20))
 
 
 # ------ 3. NPS scores
@@ -187,11 +196,11 @@ data$nps.score <- rnorm(data.n, mean = 9, sd = 2)
 # -2 for repeated information
 # -1 for other complaints
 data$nps.score <- data$nps.score -
-  3 * data$complain.connect -
-  4 * data$complain.sp.respond -
-  6 * data$complain.sp.solve -
-  2 * data$complain.repeat -
-  1 * data$complain.other 
+  3 * data.complaints$complain.connect -
+  4 * data.complaints$complain.sp.respond -
+  6 * data.complaints$complain.sp.solve -
+  2 * data.complaints$complain.repeat -
+  1 * data.complaints$complain.other 
 
 # Ensure scores stay within the 0–10 range
 data$nps.score[data$nps.score < 0] <- 0
@@ -247,75 +256,52 @@ na_randomizer <- sample(
 data$satisfaction[which(!is.na(data$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
 
 
-# ------ 5. Put aside the complaint variables to represent that this information was not available at this point
-
-complains.df <- subset(data, select = c(id, complain.connect, complain.sp.respond, complain.sp.solve, complain.repeat, complain.other))
-data<- subset(data, select = -c(complain.connect, complain.sp.respond, complain.sp.solve, complain.repeat, complain.other))
-
-
 # ------ 6. Check the data was created as expected
+
 summary(data)
 
 ```
 
+We can see that the database is created as expected: 
+
+* A variable "id" to identify each of the 40000 customers. 
+
+* The variable "date" indicates the day in which each customer completed the survey. 
+
+* The 3 contextual factors about the customer service attention: 
+  * "country" defines the country the customer was attended, either Drinkland or Eatland.
+  * "reason" defines the contact reason customers contacted for: cancellations of the order, delays on the order delivery, status of the order, incorrect items received by customers,  or other contact reasons. 
+  * "method" defines the contact method used by customers: either chat, email, phone or a web_form. 
+
+* 3 variables that indicate the likelihood to recommend the service: 
+  * "nps.score" indicate the responses to the Net Promoter Score (NPS), in a scale from 0 to 10
+  * "nps.segment" groups the NPS scores in detractors (scores 0 to 6), passive (scores 7-8), and promoters (scores 9-10).
+  * "detractor" indicates whether customers are grouped as detractors or not. 
+  
+* A variable, "open.comment", that contained open feedback (to simplify, we have simulated each comment as "blabla").
+
+* Additional variables (age, gender, satisfaction) were simulated as part of the original dataset from  [Part 1](https://rpubs.com/galdovaldonavas/1335090), but are not used in this study. 
 
 
+## 4.2. Sampling to Manage Workload in Thematic Analysis
 
-
-
-From that dataset, we need to see if we have enough cases for the two scenarios of interest: 
-1. Chat cases involving incorrect item issues.  
-2. Chat cases involving other types of issues. 
+Qualitative coding of open-text comments is time-consuming, since each comment must be read and classified manually. To make the workload feasible, we first checked the number of available cases in the two conditions of interest (chat cases involving incorrect item issues and chat cases involving other types of issues).
 
 
 ```{r}
 
-# ------ 6. Check the number of cases contacting through different contact methods across contact reasons and countries.
-with(data, table(method, reason, country))
+# Check the number of cases contacting through different contact methods across contact reasons and countries.
+with(data[data$method == "chat",], table(method, reason, country))
 ```
 
 
+This cross-tabulation shows that:
 
+* There are more than 1,600 cases per country for chat contacts regarding incorrect item issues.
 
+* There are more than 6,000 cases per country for chat contacts regarding other types of issues.
 
-
-
-
-
-We can see that the database is created as expected: 
-* A variable "id" to identify each of the 40000 customers of the customer service for which we had data. 
-* The variables "age" and "gender" to account for demographics of the customers. 
-* Three factor variables that define the context of the customer service attention: 
-  * "country" defines which of the country the customer was attende, either Drinkland or Eatland.
-  * "reason" defines the contact reason customers contacted for: cancellations of the order, delays on the order delivery, status of the order, incorrect items received by customers,  or other contact reasons. 
-  * "method" defines the contact method used by customers: either chat, email, phone or a web_form. 
-* Three variables that define outcomes related to the experience of the customers: 
-  * "satisfaction" measured the satisfaction ratings in a scale from 1 to 5. 
-  * "nps.score" measured the probability to recommend the service with the Net Promoter Score (scale from 0 to 10)
-  * "nps.segment" groups customers based on their NPS scores in detractors (scores 0 to 6), passive (scores 7-8), and promoters (scores 9-10).
-* A variable, "open.comment", that contained open feedback from customers, which was used to code the presence of complaints (please note that, for simplifying, we have simulated each comment as "blabla")
-* Five dichotomous variables that in the original project were derived from coding the open.comments, and specified whether customers complaint about certain aspects: 
-  * "complain.connect" for complaints about connection issues.
-  * "complain.sp.respond" for complaints about slow speed in responding, once connection was established. 
-  * "complain.sp.solve" for complaints about slow speed for solving the issue. 
-  * "complain.repeat" for complaints about needing to repeat information. 
-  * "complain.other" for other type of complaints. 
-
-Please note that while we have initially simulated the complain variables for all cases, in the real project this data was not available. They were only available for a sample of cases that we selected within each of the factors we wanted to follow up, once we coded their open comments to identify the complaints. In the next section we simulate the NA cases for the cases that were not selected in that random selection. 
-
-
-
-
-# 5. Discovering Opportunities for Incorrect Item Cases Attended Through Chat
-
-To identify improvement opportunities in this scenario, we will analyze complaints in the open comments of chat cases involving incorrect items versus chat cases involving other issues.
-
-
-## 5.1. Random Selection of Cases to Analyze Complaints
-
-Reviewing all comments in the dataset would be an unrealistic workload. Therefore, we will perform this coding and analysis on a sample, as specified in the next section. Please note that although we are working with simulated complaint data, in reality such data was only available for the sampled cases. 
-
-Using the code below, we take a random sample for each of the comparison conditions: chat cases involving incorrect items versus chat cases involving other issues. We set the size of these samples to 200 cases each, which can provide sufficient statistical power and represents an affordable coding workload coding the comments. 
+Coding all cases would not be realistic within reasonable timeframes. To address this, we randomly selected 300 cases for each condition, ensuring a manageable workload while preserving representativeness across groups.
 
 ```{r}
 
@@ -334,285 +320,30 @@ subset2.rows <- nrow(subset_chat_other)
 sample_chat_other <- subset_chat_other[sample(1:subset2.rows, sample.n), ]
 sample_chat_other$condition <- "chat_other_issues"
 
-#Bind together the two samples in a dataset
+# Bind together the two samples in a dataset
 data.ch.i <- bind_rows(sample_chat_incorrect, sample_chat_other)
-data.ch.i$condition <- factor(data.ch.i$condition)
+data.ch.i$condition <- factor(data.ch.i$condition, levels = c("chat_other_issues", "chat_incorrect_item"))
+
 #Check the final sample
 summary(data.ch.i)
 
 ```
 
+We confirm that the simulated dataset provides 300 cases per condition, with distributions consistent with the original sample.
 
-# 5.2. Evaluating the Presence of Complaints
+To validate the representativeness of this reduced dataset, we fit a logistic regression model predicting the likelihood of detractors based on the interaction between chat and incorrect item cases. The goal is to confirm whether the reduced dataset reproduces the same patterns observed in [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090). If these results do not align, the follow-up analysis would lack validity.
 
-# 5.2.1. Exploration with Descriptives and Visualizations
-
-We define a function to explore the percentages of complaints across our conditions to compare. We will prepare the desagregation for two factors, one for our condition variable, and another for the factor country, so that we can check if the pattern of results is similar across different countries. 
-
+To obtain predictive metrics from the model, we apply a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd). 
 
 ```{r}
-
-f.prop.2f <- function(my.data, my.dv.list, my.factor1, my.factor2){
-  
-  # Initialize an empty list to store the sampled subsets from each stratum.
-  results <- list() 
-  
-  # Initialize a counter for indexing elements in the 'results' list.
-  p <- 1 
-  
-  # Obtain the levels of the factors
-  f1.levels <- unique (my.data[[my.factor1]])
-  f2.levels <- unique (my.data[[my.factor2]])
-  
-  #Create a loop for each dv and for each level of the factors
-    for (dv in my.dv.list){
-      for (lf1 in f1.levels){
-        for(lf2 in f2.levels){
-          
-          # Extract the vector, successes and number of cases
-          current.vector <- my.data[my.data[[my.factor1]]==lf1 & my.data[[my.factor2]]==lf2, dv]
-          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
-          n <- length(current.vector.c) # number of cases in the vector
-          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
-          
-          # Calculate proportions and their 95% CI
-          if(n > 0){
-            proportion <- s / n #calculating proportions
-            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
-            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
-            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
-          }else{
-            proportion <- NA
-            ci_lower <- NA
-            ci_upper <- NA
-          }
-
-          # Save the results in a named vector
-          results [[p]] <- data.frame(dep.variable = dv, factor1 = lf1, factor2 = lf2, percentage = proportion * 100, 
-                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
-          p <- p + 1 
-          
-        } # close the loop for factor 2
-      } # close the loop for factor 1
-    } # close the loop for the dv
-
-  #Combine the results in a dataframe and convert outcomes to numeric columns
-  results.df <- (do.call(rbind, results))
-  rownames(results.df) <- NULL
-
-  #Return the dataframe
-  return(results.df)
-}
-
-```
-
-
-Then we can apply the function to evaluate the presencee of different complaints across our conditions of chat cases attending and not attending incorrect item issues
-
-```{r}
-#Indicate the dependent variables  in a vector
-dv.variables <- c("complain.connect", "complain.sp.respond",  "complain.sp.solve", "complain.repeat", "complain.other")
-
-# Apply the function
-prop.df <- f.prop.2f (my.data = data.ch.i , my.dv.list = dv.variables, my.factor1 = "condition", my.factor2 = "country")
-
-#Check if the proportions are as expected
-table.connect <- with(data.ch.i, table(complain.connect, condition, country))
-prop.connect <-  prop.table(table.connect, margin = 2:3)
-prop.connect # to check the results with prop.table results
-prop.df # to see the results
-```
-
-We can represent the results in a graph:
-
-```{r}
-
-# Setting the order of the complaints variables
-prop.df$dep.variable <- factor(prop.df$dep.variable, levels = c("complain.connect", "complain.repeat", "complain.sp.respond", "complain.sp.solve", "complain.other"))
-
-# Titles for each faceted graph representing a type of complaint
-custom_titles <- c(
-  complain.connect   = "Connection Problems",
-  complain.repeat     = "Need to Repeat Information",
-  complain.sp.respond = "Slow Responses",
-  complain.sp.solve   = "Slow Resolution",
-  complain.other      = "Other Complaints"
-)
-
-# Plotting the bar graph
-ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
-  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
-    position = position_dodge(width = 0.8),
-    width = 0.2
-  ) +
-  facet_wrap(~ dep.variable, 
-             scales = "fixed", 
-             axes = "all", 
-             labeller = labeller(dep.variable = custom_titles)) +
-  labs(
-    y = "% of Complaints",
-    fill = "Country",
-    title = "% of Chat Complaints by Issue Type"
-  ) +
-  scale_x_discrete(labels = c ("incorrect item", "other issue")) +
-  ylim(0, 100) +  
-  geom_text(
-    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
-    position = position_dodge(width = 0.8),   # match the dodge of bars
-    vjust = -3,                             # slightly above the bar
-    size = 2.5                                # text size
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.title.x = element_blank(),
-    legend.position = c(1, 0),
-    legend.justification = c("right", "bottom"),
-    legend.title = element_text(size = 10, face = "bold"),
-    legend.text  = element_text(size = 10),
-    panel.spacing = unit(1, "lines"),
-    plot.title = element_text(hjust = 0.5, face = "bold"),
-    strip.text = element_text(face = "bold"),
-    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
-    plot.margin = margin(10, 5, 10, 5)
-  )
-
-```
-
-The graphs suggest that chat attention to incorrect item issues and chat attention to other issues differ mainly in the presence of slow resolution complaints. These are substantially more common for incorrect item issues (46%–49% depending on the country) compared to other issues (7%–15%).
-
-The graphs also suggest that this pattern of results is consistent across countries. 
-
-
-### 5.2.2. Modeling the Presence of Complaints
-
-To formally test the above observations, we estimate binomial logistic regression models for each type of complaint. In these models, country is included as a covariate to account for cultural differences in complaint tendencies. Since our sample have similar proportion of cases for each condition across both countries, multicollinearity is not expected to be an issue.
-
-```{r}
-# Specify other issues as the reference level for the condition variable
-data.ch.i$condition <- factor(data.ch.i$condition, levels = c("chat_other_issues", "chat_incorrect_item"))
-
-##-- Models for different type of complaints
-
-# Logistic model to predict connection complaints
-m.connect <- glm(complain.connect ~ condition + country, data = data.ch.i, family = binomial)
-summary(m.connect)
-
-# Logistic model to predict complaints about the need to repeat information
-m.repeat <- glm(complain.repeat ~ condition + country, data = data.ch.i, family = binomial)
-summary(m.repeat)
-
-# Logistic model to predict slow response complaints
-m.respond <- glm(complain.sp.respond ~ condition + country, data = data.ch.i, family = binomial)
-summary(m.respond)
-
-# Logistic model to predict slow resolution complaints
-m.solve <- glm(complain.sp.solve ~ condition + country, data = data.ch.i, family = binomial)
-summary(m.solve)
-
-# Logistic model to predict other complaints
-m.other <- glm(complain.other ~ condition + country, data = data.ch.i, family = binomial)
-summary(m.other)
-
-```
-
-Similarly to our descriptive exploration, the binomial models indicate that chat attention to incorrect item issues and chat attention to other issues only differ in the presence of slow resolution complaints.
-
-To rule out the possibility that the effect of issue type depended on the country, we also tested interaction models.
-
-```{r}
-##-- Models for different type of complaints, including interaction tests
-
-# Logistic model to predict connection complaints
-m.connect.i <- glm(complain.connect ~ condition * country, data = data.ch.i, family = binomial)
-summary(m.connect.i)
-
-# Logistic model to predict complaints about the need to repeat information
-m.repeat.i <- glm(complain.repeat ~ condition * country, data = data.ch.i, family = binomial)
-summary(m.repeat.i)
-
-# Logistic model to predict slow response complaints
-m.respond.i <- glm(complain.sp.respond ~ condition * country, data = data.ch.i, family = binomial)
-summary(m.respond.i)
-
-# Logistic model to predict slow resolution complaints
-m.solve.i <- glm(complain.sp.solve ~ condition * country, data = data.ch.i, family = binomial)
-summary(m.solve.i)
-
-# Logistic model to predict other complaints
-m.other.i <- glm(complain.other ~ condition * country, data = data.ch.i, family = binomial)
-summary(m.other.i)
-
-```
-
-Out of the five interaction tests, only one (for complain.repeat) reached nominal significance (p = .033). However, this effect did not survive correction for multiple testing (Bonferroni-adjusted threshold = .01), and it also lacked theoretical or practical relevance. We therefore conclude that complaint patterns are largely consistent across countries. The only robust and substantively meaningful difference is the higher prevalence of slow resolution complaints for incorrect item issues.
-
-For reasons of parsimony and interpretability, we simplify our modeling strategy and focus on predicting slow resolution complaints without including country as a factor:
-
-```{r}
-
-# Binomial model to predict slow resolution complaints excluding the non-significant factors 
-m.solve2 <- glm(complain.sp.solve ~ condition, data = data.ch.i, family = binomial)
-summary(m.solve2)
-
-# Compare the models with and without the country factor
-anova(m.solve2, m.solve, test = "Chisq")
-
-```
-
-The likelihood ratio test confirms that removing the country variable does not significantly reduce model fit. Therefore, we keep as our final model the simplified model that excludes it.
-
-We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of resolution complaints is associated with incorrect item issues.
-
-
-### 5.2.3. Creating Metrics to Interpret the Model
-
-To interpret the results of our binomial logistic regression, we will compute several complementary metrics for each of the factors:
-  * Predicted percentage of successes for the presence of each factor (while holding others constant).
-  * Differences in predicted percentages of successes compared to the baseline.
-  * Relative probabilities (risk ratios).
-  * Odds ratios.
-
-To calculate the predicted proportions, we first need to build a design matrix that represents the presence of each factor, so that we can generate predictions for each scenario separately.
-
-We build the matrix by editing reusable code we have published in my [toolkit for binomial models] (https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd)
-
-
-```{r}
-
 #####
-# Design Matrix for Predictions
+# Fit the binomial model excluding the non-significant status factor
 #####
+rep.binomial.model.c <- glm(detractor ~ condition + country,
+                        data = data.ch.i, family = "binomial")
 
-# Extract the factor names from the model, with and without the intercept--- no editions needed
-f.names.interc <- names(coef(m.solve2))
-f.names <- f.names.interc[-1]
+summary(rep.binomial.model.c)
 
-# Create a matrix with 1s on the diagonal (each case represents one factor set to 1) --- no editions needed
-my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
-my.matrix.df[, 1] <- f.names.interc
-names(my.matrix.df) <- c("case", f.names)
-
-
-# Ensure factor variables match the dataset format. ---editions needed for our factor condition
-names(my.matrix.df)[names(my.matrix.df) == "conditionchat_incorrect_item"] <- "condition"
-my.matrix.df$condition[my.matrix.df$condition == 1] <- "chat_incorrect_item"
-my.matrix.df$condition[my.matrix.df$condition == 0] <- "chat_other_issues"
-my.matrix.df$condition <- as.factor(my.matrix.df$condition)
-
-# Quick check of the structure --- no editions needed
-str(my.matrix.df)
-my.matrix.df
-
-
-
-```
-
-
-We also specify a [function to calculate the metrics from my toolkit for binomial models] (https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd)
-
-```{r}
 #####
 #Function to obtain key interpretation metrics for a binomial logistic model
 #####
@@ -726,99 +457,303 @@ f.metrics.binomial <- function(my.model, my.matrix){
   return(results)
 }
 
+#####
+# Design Matrix for Predictions
+#####
 
-```
+# Extract the factor names from the model, with and without the intercept
+f.names.interc <- names(coef(rep.binomial.model.c))
+f.names <- f.names.interc[-1]
 
+# Create a matrix with 1s on the diagonal (each case represents one factor set to 1)
+my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
+my.matrix.df[, 1] <- f.names.interc
+names(my.matrix.df) <- c("case", f.names)
 
-We apply the function to our model and the specified matrix: 
+# Ensure factor variables match the dataset format: we need to do it for country and condition. 
+names(my.matrix.df)[names(my.matrix.df) == "countryDrinkland"] <- "country"
+my.matrix.df$country[my.matrix.df$country == 1] <- "Drinkland"
+my.matrix.df$country[my.matrix.df$country == 0] <- "Eatland"
+my.matrix.df$country <- as.factor(my.matrix.df$country)
 
-```{r}
-# Apply the function to the final binomial model
-m.solve2.metrics.df <- f.metrics.binomial(m.solve2, my.matrix.df)
+names(my.matrix.df)[names(my.matrix.df) == "conditionchat_incorrect_item"] <- "condition"
+my.matrix.df$condition[my.matrix.df$condition == 1] <- "chat_incorrect_item"
+my.matrix.df$condition[my.matrix.df$condition == 0] <- "chat_other_issues"
+my.matrix.df$condition <- as.factor(my.matrix.df$condition)
+
+#####
+# Calculate the metrics to the model using the function and matrix above
+#####
+
+sample.model.metrics.df <- f.metrics.binomial(rep.binomial.model.c, my.matrix.df)
 
 # Display the resulting metrics
-m.solve2.metrics.df
+sample.model.metrics.df
 
 ```
 
-These metrics allow us to translate the coefficients of the logistic model into more intuitive quantities:
-* Predicted complaint probabilities: The probability of a slow resolution complaint is 47.5% for incorrect item issues, compared to 11.5% for other cases.
-* Relative probability (risk ratio): The probability of complaints is 4.13 times higher for incorrect item issues than for other cases.
-* Odds ratio: The odds of complaints are 6.96 times higher for incorrect item issues. Unlike the predicted probabilities, the odds ratio provides an effect size that is independent of the model intercept. 
+We observe that the predictions for the reduced subsample are consistent with those obtained from the full dataset, with overlapping confidence intervals (see Section 3). This supports the representativeness of the subsample and justifies using it for further exploration of the differences between chat cases involving incorrect item issues and other issues.
+
+Having established this, we proceed to code the open comments from customers to identify the most common complaints and opportunities for improvement.
 
 
-We can further enhance interpretability with a dot-and-whisker plot for the predicted percentages of complaints across factors:
+## 4.3. Simulation of the Qualitative Coding for the Thematic Analyses
 
+Drawing from prior literature on customer service, we defined five initial categories of complaints to guide the coding of customer comments:
+
+* Connection issues
+
+* Slow response time
+
+* Slow issue resolution
+
+* Repetition of information
+
+* Other types of complaints
+
+Since this is a simulated dataset, we generate these categories directly from the complaints information embedded in the data simulated earlier.
+
+```{r}
+# Merge the complaints information in our subsample
+data.ch.i <- merge(data.ch.i, data.complaints, by = "id", all.x = TRUE)
+
+# Check the results
+summary(data.ch.i) 
+
+```
+
+The results are simulated as expected, with the following proportions:
+
+* 16% of cases reported connection issues,
+* 15% reported slow response,
+* 31% reported slow resolution,
+* 3% reported repeated information, and
+* 18% reported other types of complaints.
+
+
+
+# 5. Comparing the Presence of Complaints Across Conditions
+
+To investigate why chat cases handling incorrect item issues have a higher proportion of detractors compared to other issues, we examine the type and frequency of complaints in each condition.
+
+## 5.1. Exploration with Descriptives
+
+We calculate the percentage of cases reporting each type of complaint across the two conditions and countries, along with 95% confidence intervals. This is done using a reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd).  
+
+```{r}
+#####
+#  Function to calculate percentages and 95% CI across two factors
+#####
+
+f.prop.2f <- function(my.data, my.dv.list, my.factor1, my.factor2){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factors
+  f1.levels <- unique (my.data[[my.factor1]])
+  f2.levels <- unique (my.data[[my.factor2]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf1 in f1.levels){
+        for(lf2 in f2.levels){
+          
+          # Subset the data for the current factor combination
+          current.vector <- my.data[my.data[[my.factor1]]==lf1 & my.data[[my.factor2]]==lf2, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save results
+          results [[p]] <- data.frame(dep.variable = dv, factor1 = lf1, factor2 = lf2, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+        } # close the loop for factor 2
+      } # close the loop for factor 1
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+
+#####
+#  Application of the function to calculate frequency of complaints across conditions and countries
+#####
+
+# Save a vector with the names of the dependent variables referring to complaints
+dv.variables <- c("complain.connect", "complain.sp.respond",  "complain.sp.solve", "complain.repeat", "complain.other")
+
+# Apply the function
+prop.df <- f.prop.2f (my.data = data.ch.i , my.dv.list = dv.variables, my.factor1 = "condition", my.factor2 = "country")
+
+# Visualize the results
+prop.df # to see the results
+
+
+
+```
+
+
+## 5.2. Exploration with Visualizations
+
+To better understand how complaints differ across chat cases handling incorrect item issues versus other issues, we visualize the above percentages and their 95% confidence intervals for each complaint type, separated by country.
 
 ```{r}
 
-# Add descriptive labels for each factor
-m.solve2.metrics.df$Label <- NA_character_
-m.solve2.metrics.df$Label[m.solve2.metrics.df$Term == "(Intercept)"] <- 
-  "Baseline: Other Issues"
-m.solve2.metrics.df$Label[m.solve2.metrics.df$Term == "conditionchat_incorrect_item"] <- 
-  "Incorrect Item Issues"
+# Set order of complaint types for consistent plotting
+prop.df$dep.variable <- factor(prop.df$dep.variable, levels = c("complain.connect", "complain.repeat", "complain.sp.respond", "complain.sp.solve", "complain.other"))
 
+# Custom titles for facets
+custom_titles <- c(
+  complain.connect   = "Connection Problems",
+  complain.repeat     = "Need to Repeat Information",
+  complain.sp.respond = "Slow Responses",
+  complain.sp.solve   = "Slow Resolution",
+  complain.other      = "Other Complaints"
+)
 
-# Create the dot-and-whisker plot for the predictions
-ggplot(m.solve2.metrics.df, aes(x = Prediction, 
-                    y = reorder(Label, Prediction))) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "darkgrey") +
-  geom_errorbarh(aes(xmin = Lower_Prediction, xmax = Upper_Prediction), height = 0.2) +
-  geom_point(size = 3) +
-    geom_text(aes(label = paste(round(Prediction,1), "%")), 
-            vjust = -1, size = 3.5) + 
-  labs(
-    title = "Slow Resolution Complaints in Chat By Issue Attended",
-    x = "% of Complaints",
-    y = "Issue Type"
+# Plot bar chart with error bars and faceting (using ggplot2)
+ggplot(prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = ci_lower.perc, ymax = ci_upper.perc),
+    position = position_dodge(width = 0.8),
+    width = 0.2
   ) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(dep.variable = custom_titles)) +
+  labs(
+    y = "% of Complaints",
+    fill = "Country",
+    title = "% of Chat Complaints by Issue Type"
+  ) +
+  scale_x_discrete(labels = c ("incorrect item", "other issue")) +
+  ylim(0, 100) +  
+  geom_text(
+    aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -3,                             # slightly above the bar
+    size = 2.5                                # text size
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = c(1, 0),
+    legend.justification = c("right", "bottom"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text  = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
 
 ```
-The graph clearly illustrates the substantial difference in predicted complaint rates between chats addressing incorrect item issues and those handling other issues. The 95% confidence intervals for the two groups are separated by more than 20 percentage points, highlighting a robust difference.
+
+The graphs suggest that chat attention to incorrect item issues and chat attention to other issues differ mainly in the presence of slow resolution complaints. These are substantially more common for incorrect item issues compared to other issues.
+
+The graphs also suggest that this pattern of results is consistent across countries. 
 
 
-## 5.3. Further Text Coding & Analyses of Specific Problems
+## 5.3. Modeling the Difference of Complaints Across Conditions
 
-Once we identified that complaints about slow resolution speed were driving the difference between incorrect item issues and other issues within chat cases, it became important to further identify and code for the specific problems users were raising. 
+To formally test the observations from the descriptive graphs, we estimate binomial logistic regression models for each type of complaint. These models examine whether the likelihood of each complaint differs between chat cases involving incorrect item issues versus other issues, controlling for country. 
 
-In the original project, this type of qualitative coding is sometimes carried out during the first coding phase whenever such issues could be identified. Otherwise, it was conducted later for categories that showed meaningful differences, as we are doing here.
+Given that our subsamples have similar proportions across countries, multicollinearity is not expected to be an issue.
+
+```{r}
+
+##-- Logistic Models for different type of complaints, controlling for country
+
+# Connection complaints
+m.connect <- glm(complain.connect ~ condition + country, data = data.ch.i, family = binomial)
+summary(m.connect)
+
+# Complaints about needing to repeat information
+m.repeat <- glm(complain.repeat ~ condition + country, data = data.ch.i, family = binomial)
+summary(m.repeat)
+
+# Slow response complaints
+m.respond <- glm(complain.sp.respond ~ condition + country, data = data.ch.i, family = binomial)
+summary(m.respond)
+
+# Slow resolution complaints
+m.solve <- glm(complain.sp.solve ~ condition + country, data = data.ch.i, family = binomial)
+summary(m.solve)
+
+# Other complaints
+m.other <- glm(complain.other ~ condition + country, data = data.ch.i, family = binomial)
+summary(m.other)
+
+```
+
+As expected from the descriptive graphs, slow resolution complaints are significantly more frequent in chat cases involving incorrect item issues. Other types of complaints show smaller or negligible differences across conditions.
+
+Attending to this, we proceed to explore opportunities of improvements within the slow resolution complaints. 
 
 
-### 5.3.1. Data Simulation for Specific Problems in Slow Resolution Complaints
+# 6. Thematic Analyses Within Slow Resolution Compalaints
 
-To realistically illustrate the coding of slow resolution complaints, we assume that a single complaint may mention more than one specific problem. The simulation therefore proceeds in two steps:
+While slow resolution is the problem that appears to be the responsible of the high percentage of detractors involving chat cases attending incorrect item issues, it is important to deep dive more on the specific problems and opportunities related to these slow resolution issues. 
 
-Number of problems mentioned (K). For each case, we first draw how many problems are mentioned (none, one, two, or three). This step allows us to keep a reasonable proportion of “unspecified” complaints (when K=0) while also controlling the degree of overlap between problems (when K>1).
 
-Selection of specific problems. Given the value of K, we then assign the actual problems without replacement, with probabilities weighted by the case condition (incorrect item vs. other issue). This way, problems with uploading photos are much more likely to occur in incorrect item cases, whereas in other issues other types of problems tend to dominate.
+### 6.1. Data Simulation for the Qualitative Coding of Slow Resolution Complaints
 
-This approach ensures that:
-– The share of unspecified complaints remains realistic,
-– Co-occurrence of problems does not inflate artificially,
-– And most importantly, the excess of slow resolution complaints in the incorrect item condition can be explained primarily by difficulties with uploading photos, which is the theoretically expected pattern.
- 
- 
+We simulate the appearence of 4 type of problems identified in the qualitative coding: 
+
+* Problems uploading photos in the chat. 
+* Slow procedures to check the customers' information. 
+* Problems fulfilling the promised deadlines. 
+* We also consider a category to keep slow resolution conmplaints with unspecified problems. 
+
+We assume that a single complaint may mention more than one specific problem. The simulation therefore proceeds in two steps:
+
+* 1. We first draw how many problems are mentioned within each comment (none, one, two, or three). 
+
+* 2. We sample problems without replacement, with probabilities weighted by the case condition (incorrect item vs. other issue). We set a higher probability for problems uploading photos in incorrect item cases. 
+
  
 ```{r}
 
-# 1) Limpia/crea columnas de problemas (multi-etiqueta)
+# 1) Create variables for each problem
 vars <- c("problem.photo","problem.info","problem.deadline","problem.unspecified")
 for(v in vars) data.ch.i[[v]] <- NA_real_
 
-# 2) Parámetros: número de problemas por queja (puedes ajustar por condición si quieres)
-#    K = 0 => unspecified; K >= 1 => se asignan K problemas distintos sin reemplazo
+# 2) Specify parameters for probability of problems within each condition. 
 pk_other    <- c(`0` = 0.10, `1` = 0.70, `2` = 0.18, `3` = 0.02)   # other issues
 pk_incorrect<- c(`0` = 0.05, `1` = 0.70, `2` = 0.22, `3` = 0.03)   # incorrect item
 
-# 3) Pesos por condición para elegir problemas (sin reemplazo)
+# 3) Specify the weights for each problem probability
 probs <- c("photo","info","deadline")
-w_other     <- c(photo = 0.05, info = 0.60, deadline = 0.35)       # otras incidencias
+w_other     <- c(photo = 0.05, info = 0.60, deadline = 0.35)       # other issues
 w_incorrect <- c(photo = 0.70, info = 0.20, deadline = 0.10)       # incorrect item
 
-# 4) Función auxiliar: muestreo sin reemplazo ponderado
+# 4) Function for sampling without replacement
 sample_weighted_no_replace <- function(items, weights, k){
   if(k <= 0) return(character(0))
   picked <- character(0)
@@ -832,20 +767,18 @@ sample_weighted_no_replace <- function(items, weights, k){
   picked
 }
 
-# 5) Asignación fila a fila, SOLO en quienes tienen queja de slow resolution
+# 5) Asignation of paramenters for cases with slow resolution complaints
 idx <- which(data.ch.i$complain.sp.solve == 1)
 
 for(i in idx){
   cond <- data.ch.i$condition[i]
   
-  # elige distribución de K según condición
+  # Assignation depending on condition
   pk <- if(cond == "chat_incorrect_item") pk_incorrect else pk_other
   K <- as.integer(sample(as.integer(names(pk)), size = 1, prob = pk))
-  
-  # elige pesos según condición
   w  <- if(cond == "chat_incorrect_item") w_incorrect else w_other
   
-  # inicializa a 0 (para quienes tienen queja)
+  # Start with 0 for all variables
   data.ch.i$problem.photo[i]       <- 0
   data.ch.i$problem.info[i]        <- 0
   data.ch.i$problem.deadline[i]    <- 0
@@ -862,28 +795,29 @@ for(i in idx){
   }
 }
 
-# 6) Para quienes NO tienen queja, deja NA (o pon 0 si prefieres)
+# 6) For those without complaints, leave 0 as a value
 no_idx <- which(data.ch.i$complain.sp.solve == 0)
 data.ch.i[no_idx, c("problem.photo","problem.info","problem.deadline","problem.unspecified")] <- 0
 
 
 # Check the results
-with(data.ch.i, table(problem.photo, condition))
-with(data.ch.i, table(problem.info, condition))
-with(data.ch.i, table(problem.deadline, condition))
-with(data.ch.i, table(problem.unspecified, condition))
-
+summary(data.ch.i)
 
 ```
  
+We can see the data of the new variables was correctly simulated, with the following frequencies: 19% of cases complaining about problems loading photos, 12% about slow processes for checking the customer information, 8% about unfulfillment of the promissed deadlines, and 2% of cases having unespecified slow resolution issues. 
+
+## 6.2 Comparing the Presence of Slow Resolution Problems Across Conditions
+
+To investigate if the higher presence of slow resolution complaints in chat cases attending incorrect item issues can be explained by specific issues we can address, we explore the frequencies of these problems across the two conditions. 
+
+## 6.3. Exploration with Descriptives
+
+We calculated the percentage of cases mentioning each type of problem across conditions and countries using the reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd), already especified in section 5.2. 
+
+For comparability with prior analyses, we also calculated the percentage of absence of slow resolution complaints. 
 
 
-
-# 5.3.2. Exploratory Analyses of Specific Problems
-
-To explore how specific problems were distributed across conditions, we calculated the percentage of cases mentioning each type of problem. For comparability, we also calculated the percentage of absence of slow resolution complaints. 
-
-All these percentages were obtained with the reusable function specified in Section X.
 
 ```{r}
 
@@ -893,7 +827,7 @@ data.ch.i$no.complain.sp.solve [data.ch.i$complain.sp.solve == 1] <- 0
 data.ch.i$no.complain.sp.solve [data.ch.i$complain.sp.solve == 0] <- 1
 
 
-#Specify the list of dependent variables as a vector
+# Specify the list of dependent variables as a vector
 dv.problems <- c("no.complain.sp.solve", "problem.photo", "problem.info", "problem.deadline", "problem.unspecified")
 
 # Calculate the percentages using the reusable function
@@ -904,8 +838,9 @@ prob.prop.df
 
 ```
 
+## 6.3. Exploration with Visualizations
 
-We can depict the results in a graph
+To better understand how the differences between conditions in slow resolutions problems can be explained by specific problems, we visualize the above percentages and their 95% confidence intervals for each problem type, condition, and country
 
 ```{r}
 
@@ -963,152 +898,25 @@ ggplot(prob.prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
 
 ```
 
-The plot and the table of proportions show that the cases of incorrect items differ not only in having more complaints about slow resolution, but also on the nature of these complaints: most of them are about difficulties loading photos in the chat, which rarely appear in other issues.
+We can see that cases attended by chat for incorrect items issues not only differ on having more complaints about slow resolution, but also on the nature of these complaints: 
 
-Further plotting can help us visualize the extent to which the presence of slow resolution complaints is proportional to the difference across conditions to in the mention of problems loading photos. 
+* most complaints in this condition are about about difficulties loading photos in the chat, which rarely appear in other issues. This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items, while this photo requirement is rare in other cases. 
 
+* Slow information checks is also more common in this condition than in other issues. 
 
-### 5.3.2.1 Exploring the Correspondence of Additional Complaints and Specific Problems
-
-In order to disentangle whether the larger number of slow resolution complaints in incorrect item cases is mainly driven by photo upload problems, we create a multicategorical variable that integrates the presence of complaints, the complaints mentioning problems loading photos (which may include other problems), and complaints mentioning only other problems. 
-
-```{r}
-# Create a factor that integrates presence of slow resolution complaints and mentions to photo issues
-data.ch.i$sp.solve.complain.problem <- NA_character_
-data.ch.i$sp.solve.complain.problem [data.ch.i$no.complain.sp.solve == 1] <- "No slow resolution problems"
-data.ch.i$sp.solve.complain.problem [data.ch.i$problem.photo == 1] <- "Chat not loading photos"
-data.ch.i$sp.solve.complain.problem [!data.ch.i$no.complain.sp.solve == 1 & !data.ch.i$problem.photo == 1] <- "Other problems"
-data.ch.i$sp.solve.complain.problem  <- factor (data.ch.i$sp.solve.complain.problem, levels = c("No slow resolution problems","Chat not loading photos", "Other problems"))
+We can continue with formal testing of these differences. 
 
 
-#Check if the recodification worked as expected
-with(data.ch.i, table(sp.solve.complain.problem, no.complain.sp.solve, problem.photo))
+## 6.4.  Modeling the Difference of Slow Resolution Problems Across Conditions
 
-```
+To formally test the observations from the above graphs, we estimate binomial logistic regression models to predict each type of slow resolution complaint from whether chat cases involve incorrect item issues versus other issues, and controlling for country. 
 
-
-Then we specify a function to obtain the percentages of each category of a dependent variable  across all the levels of our factor, and the binomial 95% confidence intervals
+Given that our subsamples have similar proportions across countries, multicollinearity is not expected to be an issue.
 
 ```{r}
-f.prop.multicategory.1f <- function(my.data, my.dv, my.factor){
-  
-  # Initialize an empty list to store the sampled subsets from each stratum.
-  results <- list() 
-  
-  # Initialize a counter for indexing elements in the 'results' list.
-  p <- 1 
-  
-  # Obtain the levels of the dependent variable and the factor
-  dv.levels <- unique (my.data[[my.dv]])
-  f.levels <- unique (my.data[[my.factor]])
-  
-  #Create a loop for each factor level
-    for (fl in f.levels){
-      
-    #Extract the vector and clean for missing cases
-    current.vector <- my.data[my.data[[my.factor]]== fl, my.dv]
-    current.vector.c <- current.vector[!is.na(current.vector)] #cleaning missing cases
-      
-      #Create a loop for each dv level  
-      for (dvl in dv.levels){
-          
-      # Extract the successes and number of cases
-      n <- length(current.vector.c) # number of cases in the vector
-      s <- length(current.vector.c[current.vector.c == dvl]) # number of cases satisfying the condition
-          
-          # Calculate proportions and their 95% CI
-          if(n > 0){
-            proportion <- s / n #calculating proportions
-            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
-            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
-            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
-          }else{
-            proportion <- NA
-            ci_lower <- NA
-            ci_upper <- NA
-          }
+##-- Logistic Models for predicting different type of slow resolution complaints
 
-          # Save the results in a named vector
-          results [[p]] <- data.frame(factor = fl, dv.level = dvl, percentage = proportion * 100, 
-                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, stringsAsFactors = FALSE)
-          p <- p + 1 
-          
-
-      } # close the loop for the dv levels
-    } # close the loop for the factor levels
-
-  #Combine the results in a dataframe and convert outcomes to numeric columns
-  results.df <- (do.call(rbind, results))
-  rownames(results.df) <- NULL
-
-  #Return the dataframe
-  return(results.df)
-}
-
-```
-
-
-Then we apply the function to our dependent variable representing the presence and type of slow resolution complaints segregated by our condition. 
-
-```{r}
-complaints.problems.df <- f.prop.multicategory.1f(data.ch.i, "sp.solve.complain.problem", "condition")
-complaints.problems.df
-
-```
-
-
-Finally, we can plot the results in a bar graph with bars stacked by proportions
-
-```{r}
-
-#Specify the order of the dv variable levels in the new dataframe
-complaints.problems.df$dv.level  <- factor (complaints.problems.df$dv.level, levels = c("No slow resolution problems","Chat not loading photos", "Other problems"))
-
-
-
-# Graph with stacked bars
-ggplot(complaints.problems.df, aes(x = factor, y = percentage, fill = dv.level)) +
-  geom_col(position = "stack", width = 0.6) +
-
-  # Specify titles and labels
-  labs(x = "Condition",
-       y = "% of Cases",
-       fill = "Problem type",
-       title = "Problems in Slow Resolution Complaints") +
-  
-  # Rename the conditions
-  scale_x_discrete(labels = c("chat_incorrect_item" = "Incorrect item",
-                              "chat_other_issues" = "Other issue")) +
-  
-  # Introduce colors of the stacked bars
-  scale_fill_manual(values = c(
-    "No slow resolution problems" = "grey98",      
-    "Chat not loading photos" = "antiquewhite3", 
-    "Other problems" = "antiquewhite1"
-  )) +
-    # Add the data labels (if they are not too crowded)
-  geom_text(aes(label = paste0(round(percentage, 1), "%")), # add the data label with 1 decimal
-            position = position_stack(vjust = 0.5), # Centers the label in the vertical axis
-            color = "black", # color of the data leabel text
-            size = 3) + # size of the data label text
-  
-  theme_minimal(base_size = 14)
-
-
-```
-We can see that the difference in complaints is mainly explained by the difference in the presence of problems loading photos for the incorrect item cases. 
-
-This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items, while this photo requirement is rare in other cases. 
-
-We further check if the differences in the presence of the problems are statistically significant, using a logistic models.
-
-### 5.3.3. Testing Significance of Differences Across Conditions in Slow Resolution Problems
-
-To confirm that the difference in the problems loading the photo between the two conditions was statistically significant, and that there were not other significant differences across conditions, we conduct logistic regression models to predict the problems from the factor condition, using country as a covariate. 
-
-```{r}
-
-# For problems loading the photo
+# Problems loading the photo
 m.problem.photo <- glm (problem.photo ~ condition + country, data = data.ch.i)
 summary(m.problem.photo)
 
@@ -1120,27 +928,25 @@ summary(m.problem.info)
 m.problem.deadline <- glm (problem.deadline ~ condition + country, data = data.ch.i)
 summary(m.problem.deadline)
 
-
 # Unspecified problems
 m.problem.unspecified <- glm (problem.unspecified ~ condition + country, data = data.ch.i)
 summary(m.problem.unspecified)
 
 
 ```
-The chi-square tests confirm that problems uploading photos in the chat are significantly more frequent in cases experiencing incorrect item issues, versus other cases, and that this is the only significant difference we observe. (problem.info does not pass the Bonferroni Threshold)
+The logistic models confirm the higher presence of photo problems and slow information checks problems in chat cases attending incorrect item issues than those attending other issues. 
+
+Yet, to further investigate the extent to which these problems explain the high presence in detractors for chat cases attending incorrect item issues, we need to model, these effects. 
 
 
-## 5.4. Modeling
+## 6.5. Modeling the Effect of Problems Predicting Detractors
 
 To evaluate the impact of the problems on the likelihood to recommend we will use logistic binomial regression. 
 
-To allow comparability with prior analyses, we use the presence of NPS detractors as our indicator of the likelihood to recommend. 
 
+### 6.5.1. Preliminary Explorations
 
-### 5.4.1. Preliminary Exploration of Interactions and Collinearity Issues
-
-
-We conduct a mosaic plot with all the considered predictors to identify collinearity issues and interactions. Since we have many predictors, we do it in several phases:
+As preliminaries before modeling, We conduct a mosaic plot with all the considered predictors to identify collinearity issues and potential interactions between factors. Since we have many predictors, we do it in several phases:
 
 ```{r}
 ## Checking interactions between problems, countries and conditions
@@ -1166,12 +972,14 @@ doubledecker(table.problems)
 
 
 ```
-We cannot identify relevant interactions between the factors used to predict detractors. Across different conditions and countries, the presence of each of the problems was generally associated with mostly all users being detractors. Also, this ceiling effect makes it difficult to clearly observe whether the effects of the different problems interact with each other.
+We cannot identify relevant interactions between the factors used to predict detractors: aross different conditions and countries, the presence of each of the problems was generally associated with mostly all users being detractors. This ceiling effect makes it difficult to clearly observe whether the effects of the different problems interact with each other.
 
-We also do not identify any problems of collinearity. None of the factors show an extreme relation with any of the other factors.
+We also do not identify any problems of collinearity beyond the already expected strong relation between problems loading photos and the incorrect items condition. Although we initially include the condition as a factor to illustrate how much its effect on predictors is explained by the problems, the condition factor will be eliminated in the final versions of the model. 
 
 
-### 5.4.2. Logistic Regression Model
+### 6.5.2. Prediction Models
+
+We start exploring a model that includes all the potential predictors
 
 ```{r}
 # Specify the model
@@ -1183,9 +991,9 @@ summary(m.problems.sp.solve)
 
 The model indicates that the presence of all the problems expected are associated with a significantly higher probability of users becoming detractors. 
 
-In line with our exploratory analyses, the effect of condition is not longer significant to predict detractors once these specific problems are accounted for. Country is also a not significant factor. 
+Furthermore, once we account for these specific problems, the effect of condition is no longer significant, suggesting that we are accounting for the set of problems behind the higher presence of detractors in chat cases attending incorrect item issues. 
 
-To enhance the parsimony of our model, we check the exclusion of these non significant factors. 
+To evaluate the effect of each problem with a more parsimonious model, we check the exclusion of the non significant factors. 
 
 ```{r}
 # Specify the model
@@ -1200,48 +1008,35 @@ anova(m.problems.sp.solve2 , m.problems.sp.solve, test = "Chisq")
 ```
 The likelihood ratio test confirms that removing the country and condition variables do not significantly reduce model fit. Therefore, we simplify the model by excluding them.
 
-We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of the problems are associated with detractors.
-
-
-### 5.4.2.1 Model Metrics
-
-
-To interpret the results of our binomial logistic regression, we use reusable codes from our toolkit that will help us calculate the predicted percentage of detractors when the loading problem is present and not, the differences in these predicted percentages, the relative probabilities (risk ratios), and the odds ratios.
-
-We first need to build a design matrix that represents the isolated presence of each factor (and the intercept). Each row in the design matrix represents a scenario where one factor is present and all others are set to zero, allowing us to isolate the effect of each variable.  
-
+We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of the problems are associated with detractors. For that, we use procedures and a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd), already specified in section 4.2. 
 
 
 ```{r}
+
+
+#####
+# Reusable function to calculate metrics in binomial models (probability predictions, risk rations, odds ratios)
+#####
+
+# The function has already been specified in section 4.2
+
 #####
 # Design Matrix for Predictions
 #####
 
-# Extract the factor names from the model, with and without the intercept--- editions needed 
+# Extract the factor names from the model, with and without the intercept
 f.names.interc <- names(coef(m.problems.sp.solve2)) #specify the new model here
 f.names <- f.names.interc[-1]
 
-# Create a matrix with 1s on the diagonal (each case represents one factor set to 1) --- no editions needed
+# Create a matrix with 1s on the diagonal (each case represents one factor set to 1) 
 my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
 my.matrix.df[, 1] <- f.names.interc
 names(my.matrix.df) <- c("case", f.names)
 
-# Quick check of the structure --- no editions needed
-str(my.matrix.df)
-my.matrix.df
 
-# We check that the factor in the matrix is specified in a similar way than in our database
-str(data.ch.i)
-
-
-```
-
-The structure of the variables in the matrix aligns with the structure of the variables in the dataset. 
-
-We then apply the matrix and our database to the function to compute the metrics and their 95% confidence intervals from logistic models. Please note that this function has been specified in section x, so we do not need to specify it here again.
-
-
-```{r}
+#####
+# Calculation of the Metrics
+#####
 
 # Apply the function to the final binomial model
 m.problems.sp.solve2.metrics.df <- f.metrics.binomial(m.problems.sp.solve2, my.matrix.df)
@@ -1251,8 +1046,7 @@ m.problems.sp.solve2.metrics.df
 
 ```
 
-
-Lastly, we visually represent the predicted proportions of detractors to clearly identify the extent to which the photo problems are associated with higher likelihoods of detractor status.
+We can see the presence of each of the slow resolution problems is strongly related with more detractors. We can better observe this relation with a plot that represents the expected percentages of detractors with a dot and the 95% CI of the percentages with whiskers. 
 
 ```{r}
 # Add descriptive labels for each factor
@@ -1283,20 +1077,37 @@ ggplot(m.problems.sp.solve2.metrics.df, aes(x = Prediction,
 
 ```
 
-The points represent the predicted percentages of detractors for each scenario, with horizontal whiskers showing the 95% confidence intervals.
+We can see that When the slow resolution problems are present, nearly all users are expected to become detractors. This effect is similar for all slow resolution problems. In contrast, in the absence of the problems, only around 37% of the users are predicted to be detractors.
 
-We can see that problems uploading photos have a strong impact on the likelihood of being a detractor. When these problems are present, nearly all users are expected to become detractors. In contrast, in the absence of this problem, only about half of the users are predicted to be detractors.
-
-## 5.5. Impact of Problems Loading Photos Across All Users
-
-We will simulate how the correction of each of the problems identified would impact the reduction of detractors 
+We can further investigate the impact of correcting the problems. 
 
 
-### 5.5.1. Simulating Coefficients of the Relation between Problems and Detractors
 
-For this simulation we will: 
-- Simulate a sample distribution of our regression coefficients based on our model about the effect of the problems in customers becoming detractors. 
-- Simulate a sample distribution of the predicted probabilities of being detractor using a bootstrapping technique that uses the simulation of the distribution of coefficients. 
+# 7. Evaluating the Impact of Correcting Problems on Reducing Detractors
+
+To predict the impact of correcting problems, it is important to consider different factors:
+
+* the extent to which we predict the problem can be corrected. 
+
+* the expected combination of those problems across members of the population. 
+
+* the expected effect of those combinations of problems. 
+
+* the uncertainty we have for each the above predictions. 
+
+Since the combination of all of the levels of uncertainty is not expected to follow a normal distribution, we will use bootstrapping techniques to estimate the uncertainty of the final impact prediction.  
+
+
+## 7.1. Bootstrapping Function to Estimate the Uncertainty of Our Predictions
+
+Before simulating scenarios in which we correct the problems, we create a function that help us calculate the uncertainty of our estimations for any scenario, either based on real results or in simulated ones. It follows the following procedures: 
+
+* 1. First, it estimates the coefficients for the relation of the problem and our predicted variable based on a priorly trained regression model (my.model), assuming multivariate normal distributions of those coefficients in a sample distribution of n samples (my.n).
+
+* 2. Secondly, it estimates the combination of problems in the population and the uncertainty of those combinations by simulating n bootstrapping samples (my.n) from our study sample (my.data), doing this process for each subgroup we want to especify that defines a different variation of these problems (my.factor)
+
+* 3. Thirdly, for each subgroup it calculates the final probability of the outcome and its uncertainty by obtaining a sampling distribution of these probabilities of n samples (my.n), which are derived of predicting the values for each of the n combination of coefficients obtained in point 1 and each of the n combination of problem probabilities obtained in point 2. 
+
 
 
 ```{r}
@@ -1448,6 +1259,9 @@ return (final.results)
 }
 
 ```
+
+
+## 7.2. Impact of Correcting Photo Issues
 
 Application for the present situation: 
 
@@ -1616,8 +1430,8 @@ We can see that after the correction of the photo issue, it is predicted a reduc
 Overall, we would expect 1.65% less detractors after the correction of the issue. 
 
 
+## 7.3. Comparing the Impact of Correcting Different Issues
 
-# Prioritazing Decisions Based on Impact
 
 Similarly as it has been done for the correction of photo issues, could be done for other potential issues, so we can compare the expected reduction in total of detractors for the different decisions. Due to space limits, we will just simulate how this comparison could look. 
 
@@ -1670,7 +1484,7 @@ ggplot(impact.across.corrections, aes(x = dif,
 ```
 
 
-## Following Up the Predictions
+## 8. Following Up the Predictions
 
 As in many predictions in social science and UX research, our predictions depends on many factors on out of our control, so it is specially important to continue evaluating the extent to which the predicted improvements were fulfilled. That way we can continue discovering new factors of influence and gain awareness about our potential to improve KPIs. 
 
