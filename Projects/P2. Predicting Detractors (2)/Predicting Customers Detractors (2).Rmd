@@ -1,7 +1,6 @@
 ---
 title: "Predicting Customer Detractors (Part 2): Opportunity Analysis from Open Feedback"
 output:
-  pdf_document: default
   html_document:
     df_print: paged
     self_contained: false
@@ -9,6 +8,7 @@ output:
     toc: true
     toc_float: true
     toc_depth: 2
+  pdf_document: default
   html_notebook:
     css: my_style.css
     toc: true
@@ -19,11 +19,7 @@ output:
 
 # 1. Introduction
 
-This case study explores opportunities to increase the likelihood that customers recommend the company’s customer service.
-
-It is a continuation of the project [Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090), which identified the service contexts with the lowest likelihood of recommendation (i.e., contact methods, contact reasons, and countries). Building on those findings, this follow-up project focuses on **understanding the root causes of dissatisfaction** and quantifying the potential benefits of addressing them.
-
-Specifically, we conduct a thematic analysis of open-ended feedback from Net Promoter Score (NPS) surveys to identify actionable issues. We then assess the expected impact of solving these problems on customers’ likelihood to recommend.
+This case study identifies and quantifies high-impact opportunities in the customer service to improve the likelihood that customers recommend the company, building directly on the findings of [Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090). Where Part 1 identified which service contexts had the most detractors (e.g., chat for incorrect items), this project investigates the root causes of dissatisfaction through thematic analysis of open-ended feedback and simulates the potential business impact of addressing them.
 
 The analysis includes:
 - Data simulation and cleaning.
@@ -76,7 +72,7 @@ Based on this finding, stakeholders and the research team agreed to conduct a fo
 
 # 4. Data Simulation
 
-## 4.1. Retrieving Data from the Original Dataset of Contextual Factors and NPS Scores
+## 4.1. Retrieving Data of Contextual Factors and NPS Scores
 
 This project builds on the dataset from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090), which contained information about contact reasons, contact methods, countries, and NPS scores of customers who contacted the customer service. 
 
@@ -266,7 +262,7 @@ summary(data)
 
 ```
 
-We can see that the database is created as expected: 
+The simulated dataset contains the following key variables: 
 
 * A variable "id" to identify each of the 40000 customers. 
 
@@ -287,9 +283,9 @@ We can see that the database is created as expected:
 * Additional variables (age, gender, satisfaction) were simulated as part of the original dataset from  [Part 1](https://rpubs.com/galdovaldonavas/1335090), but are not used in this study. 
 
 
-## 4.2. Sampling to Manage Workload in Thematic Analysis
+## 4.2. Sampling for Thematic Analysis
 
-Qualitative coding of open-text comments is time-consuming, since each comment must be read and classified manually. To make the workload feasible, we first checked the number of available cases in the two conditions of interest (chat cases involving incorrect item issues and chat cases involving other types of issues).
+Due to the time-consuming nature of manual qualitative coding, we first checked sample size of the two conditions of interest to ensure a feasible workload. 
 
 ```{r}
 
@@ -304,7 +300,7 @@ This cross-tabulation shows that:
 
 * There are more than 6,000 cases per country for chat contacts regarding other types of issues.
 
-Coding all cases would not be realistic within reasonable timeframes. To address this, we randomly selected 300 cases for each condition, ensuring a manageable workload while preserving representativeness across groups.
+Coding all cases was not feasible. To maintain rigor while ensuring efficiency, we randomly selected 300 cases for each condition.
 
 ```{r}
 
@@ -500,7 +496,7 @@ We observe that the predictions for the reduced subsample are consistent with th
 Having established this, we proceed to code the open comments from customers to identify the most common complaints and opportunities for improvement.
 
 
-## 4.3. Simulation of the Qualitative Coding for the Thematic Analyses
+## 4.3. Simulating Open-Text Coding for Complaints
 
 Drawing from prior literature on customer service, we defined five initial categories of complaints to guide the coding of customer comments:
 
@@ -534,11 +530,11 @@ The results are simulated as expected, with the following proportions:
 * 18% reported other types of complaints.
 
 
-# 5. Comparing the Presence of Complaints Across Conditions
+# 5. Evaluating Complaints Across Conditions
 
 To investigate why chat cases handling incorrect item issues have a higher proportion of detractors compared to other issues, we examine the type and frequency of complaints in each condition.
 
-## 5.1. Exploration with Descriptives
+## 5.1. Descriptive Analysis of Complaints
 
 We calculate the percentage of cases reporting each type of complaint across the two conditions and countries, along with 95% confidence intervals. This is done using a reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd).  
 
@@ -618,7 +614,7 @@ prop.df # to see the results
 ```
 
 
-## 5.2. Exploration with Visualizations
+## 5.2. Visualizing Complaint Frequencies
 
 To better understand how complaints differ across chat cases handling incorrect item issues versus other issues, we visualize the above percentages and their 95% confidence intervals for each complaint type, separated by country.
 
@@ -682,7 +678,7 @@ The graphs suggest that chat attention to incorrect item issues and chat attenti
 The graphs also suggest that this pattern of results is consistent across countries. 
 
 
-## 5.3. Modeling the Difference of Complaints Across Conditions
+## 5.3. Modeling Complaint Likelihood
 
 To formally test the observations from the descriptive graphs, we estimate binomial logistic regression models for each type of complaint. These models examine whether the likelihood of each complaint differs between chat cases involving incorrect item issues versus other issues, controlling for country. 
 
@@ -714,28 +710,29 @@ summary(m.other)
 
 ```
 
-As expected from the descriptive graphs, slow resolution complaints are significantly more frequent in chat cases involving incorrect item issues, while other types of complaints show smaller or negligible differences across conditions.
+The statistical models confirm our initial observation: slow resolution is the primary driver of dissatisfaction for incorrect item cases. To identify actionable solutions, we conducted a deeper thematic analysis of these specific complaints.
 
 Based on this observation, we proceed to examine more granular categories within slow resolution complaints to identify specific problems and opportunities for improvement.
 
 
-# 6. Thematic Analyses Within Slow Resolution Complaints
+# 6. Identifying Root Causes
 
-Slow resolution complaints appear to be the primary driver of the high percentage of detractors in chat cases attending incorrect item issues. To better understand the underlying issues, we simulate the presence of four specific problems within these complaints:
+Slow resolution complaints appear to be the primary driver of the high percentage of detractors in chat cases attending incorrect item issues. To identify specific problems and opportunities, we conduct additional thematic analyses focused in these complaints. 
+
+
+## 6.1. Simulating Open-Text Coding of Root Causes
+
+To represent the qualitative coding within the slow resolution complaints, we simulate the presence of four specific problems in them:
 
 * Problems uploading photos in the chat.
-
 * Delays in verifying customer information.
-
 * Missed or delayed deadlines.
-
 * Unspecified slow resolution issues.
 
 We simulate the coding in two steps:
 
-Determine how many specific problems are mentioned per comment (none, one, two, or three).
-
-Allocate problems without replacement, with probabilities weighted by case condition (higher probability of photo upload issues in incorrect item cases).
+* Determine how many specific problems are mentioned per comment (none, one, two, or three).
+* Allocate problems without replacement, with probabilities weighted by case condition (higher probability of photo upload issues in incorrect item cases).
 
  
 ```{r}
@@ -808,12 +805,12 @@ summary(data.ch.i)
 We can see the data of the new variables was correctly simulated, with the following frequencies: 19% of cases complaining about problems loading photos, 12% about slow processes for checking customer information, 8% about unfulfillment of the promised deadlines, and 2% of cases reporting unspecified slow resolution issues.
 
 
-## 6.2 Comparing the Presence of Slow Resolution Problems Across Conditions
+## 6.2 Analyzing Root Causes Across Conditions
 
 To investigate whether the higher prevalence of slow resolution complaints in chat cases attending incorrect item issues can be attributed to specific addressable problems, we compare the frequencies of these issues across the two conditions.
 
 
-## 6.3. Exploration with Descriptives
+### 6.2.1. Descriptive Statistics
 
 We calculated the percentage of cases mentioning each type of problem across conditions and countries using the reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd), already specified in section 5.2. 
 
@@ -839,7 +836,7 @@ prob.prop.df
 ```
 
 
-## 6.3. Exploration with Visualizations
+### 6.2.2. Comparative Visualizations of Root Causes
 
 To facilitate interpretation, we visualize the percentages of each problem type along with their 95% confidence intervals using bar graphs.
 
@@ -908,7 +905,7 @@ Cases attended by chat for incorrect item issues differ not only in having more 
 We continue with formal testing of these differences. 
 
 
-## 6.4.  Modeling the Difference of Slow Resolution Problems Across Conditions
+### 6.2.3. Statistical Modeling of Root Causes
 
 To formally test these differences, we fit binomial logistic regression models predicting each type of slow resolution complaint from condition (incorrect item vs. other issues), controlling for country. Given similar proportions across countries, multicollinearity is not a concern.
 
@@ -933,20 +930,20 @@ summary(m.problem.unspecified)
 
 
 ```
+
 The logistic models confirm the higher presence of photo problems and slow information check problems in chat cases attending incorrect item issues compared to other issues.  
 
 To further understand to what extent these problems explain the high proportion of detractors in chat cases attending incorrect item issues, we proceed to model these effects.
 
 
-## 6.5. Modeling the Effect of Problems Predicting Detractors
+## 6.3. Quantifying the Impact of Root Causes on Detractors
 
 To evaluate the impact of the problems on the likelihood to recommend we will fit binomial logistic regression models predicting detractors from the specific slow resolution problems, condition, and country. 
 
 
-### 6.5.1. Preliminary Explorations
+### 6.3.1. Checking for Multicollinearity and Interactions
 
 Before fitting the models, we conduct mosaic plots of all considered predictors to visually inspect collinearity and potential interactions. Given the number of predictors, we examine the mosaics in several steps.
-
 
 ```{r}
 ## Checking interactions between problems, countries and conditions
@@ -978,7 +975,7 @@ We cannot identify relevant interactions between the factors used to predict det
 We also do not identify any issues of collinearity beyond the expected strong relation between problems loading photos and the incorrect item condition. Although we initially include the condition factor to illustrate how much of its effect is explained by the problems, it will be removed in the final model.
 
 
-### 6.5.2. Prediction Models
+### 6.3.2. Predictive Model
 
 We start by fitting a model that includes all potential predictors to evaluate their individual contributions.
 
@@ -1010,7 +1007,7 @@ anova(m.problems.sp.solve2 , m.problems.sp.solve, test = "Chisq")
 
 The likelihood ratio test confirms that removing the country and condition variables does not significantly reduce model fit. Therefore, we keep this simplified model that excluedes them.
 
-We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of each problem is associated with detractors. For this, we use procedures and a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd), already specified in section 4.2.
+To interpret the model, we derived meaningful metrics using a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd), already specified in section 4.2.
 
 ```{r}
 
@@ -1079,7 +1076,7 @@ We can see that When the slow resolution problems are present, nearly all users 
 We can further investigate the impact of correcting these problems. 
 
 
-# 7. Evaluating the Impact of Correcting Problems on Reducing Detractors
+# 7. Predicted Impact of Correcting Problems
 
 To predict the potential reduction in detractors by correcting problems, we need to consider: 
 
@@ -1091,7 +1088,7 @@ To predict the potential reduction in detractors by correcting problems, we need
 Given that these uncertainties may not follow normal distributions, we will use bootstrapping to estimate the variability of the predicted impact.
 
 
-### 7.1. Bootstrapping Function to Estimate Prediction Uncertainty
+### 7.1. Building a Bootstrapping Simulation
 
 We define a reusable function to estimate the uncertainty of predicted outcomes for any scenario. The function works as follows:
 
@@ -1252,7 +1249,7 @@ return (final.results)
 Now we are ready to apply the bootstrapping function to scenarios where specific problems are corrected. We start with photo issues, as they are the most common slow resolution problem.
 
 
-## 7.2. Impact of Correcting Photo Issues
+## 7.2. Simulating the Impact of Fixing Photo Issues
 
 We compare the current probability of being a detractor with the expected probability if photo issues were fully corrected.
 
@@ -1363,7 +1360,7 @@ The impact of correcting photo issues in the chat can be huge for cases attendin
 Yet, to better calculate the global impact, it can be beneficial to evaluate the % of detractors reduction within all customer service cases. 
 
 
-### 7.2.2. Expressing the Impact in Relation to All Customer Service Cases
+### 7.2.2. Estimating the Overall Business Impact
 
 To calculate the overall impact in detractors reduction, we need to ponderate the results above by the percentage of cases in customer service that these scenarios represent. In coherence with Part 1, we will assume that: 
 
@@ -1436,7 +1433,7 @@ results.dist.differences
 The results indicate that we would expect a 1.40% less detractors within all customer service cases after the correction of the issue. 
 
 
-## 7.3. Comparing the Impact of Correcting Different Issues
+## 7.3. Comparing Potential ROI of Different Solutions
 
 Similarly to the procedure applied for correcting photo issues, we can calculate the expected impact of addressing other types of problems and compare them. Due to space constraints, we simulate how this comparison could look.
 
@@ -1492,12 +1489,12 @@ The comparison shows that correcting photo issues has the largest expected impac
 However, it is important to note that simulations of future scenarios are unstable. It is important to follow them up with analyses once the corrections are applied.
 
 
-# 8. Following Up the Prediction of Correcting Photo Issues
+# 8. Following Up the Predictions
 
 As an example, we illustrate a follow-up of the effect of correcting the issue of loading photos in the chat, assuming it was corrected on October 1st.
 
 
-## 8.1.Simulating the Data After the Correction
+## 8.1. Simulating Post-Intervention Data
 
 To the data we already had for the first semester, we simulate additional data for the second semester. The simulation is similar to the one in section 4.1, but applying a reduction in detractors after October 1st to represent the effect of correcting the photo issues. 
 
@@ -1743,7 +1740,7 @@ summary(data.2024)
 The data is simulated as expected. We can see a slightly lower percentage of detractors in the data for the whole year in comparison to the data for just the first semester. Let's analyze this difference with more detail. 
 
 
-## 8.2. Exploration of the Change with Descriptives
+## 8.2. Tracking Metrics Over Time
 
 As a first exploration of the change in detractors after correcting the photo issue, we calculate the percentage of detractors across different weeks along the year. For this purpose, we use a reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd)
 
@@ -1867,7 +1864,7 @@ The graph depicts how the decrease in detractors after correcting the photo issu
 To further validate this claim, we can test its statistical significance. 
 
 
-# Testing the Significance of the Detractors Reduction
+## 8.3. Validating the Impact with Statistical Testing
 
 For this test, we compare the proportion of detractors before and after October 1st, the date of the correction. We first summarize the percentages and their confidence intervals for each period, and then formally evaluate the change with a Chi-Square test.
 
@@ -1905,11 +1902,11 @@ The results show that the decrease in detractors after correcting the photo issu
 A plausible explanation is that our earlier prediction was based only on customers who explicitly reported the problem. In practice, however, the correction may have also benefited other customers indirectly affected by the issue, amplifying its positive impact. It is also important to consider that, since we do not have an experimental design, we cannot rule out that other improvements contributed to the reduction of detractors.
 
 
-#9. Discussion
+# 9. Discussion
 
 ## 9.1. Managerial Implications
 
-The analyses indicate that correcting the photo issue in the chat service substantially reduced the percentage of detractors, both within the affected chat cases and in the overall customer service population. This means that targeted improvements in specific failure points can generate measurable gains in customer satisfaction and recommendation rates. For managers, this provides a clear business case: investing in resolving high-impact operational issues may translate into fewer detractors and a stronger brand reputation.
+Our analysis demonstrates that correcting the photo issue in chat directly reduced the percentage of detractors by 2.4%. This provides managers with a clear, high-ROI business case: targeted investments in resolving specific operational failures can generate significant improvements in customer loyalty and brand reputation.
 
 
 ## 9.2. Limitations
