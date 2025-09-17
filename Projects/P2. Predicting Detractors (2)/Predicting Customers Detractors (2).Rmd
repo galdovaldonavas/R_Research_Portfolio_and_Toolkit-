@@ -5,7 +5,17 @@ output:
   html_document:
     df_print: paged
     self_contained: false
+    css: my_style.css
+    toc: true
+    toc_float: true
+    toc_depth: 2
+  html_notebook:
+    css: my_style.css
+    toc: true
+    toc_float: true
+    toc_depth: 2
 ---
+
 
 # 1. Introduction
 
@@ -53,7 +63,6 @@ In the previous study [Predicting Customer Detractors (Part 1)](https://rpubs.co
 
 The key findings are summarized in the chart below:
 
-
 ```{r}
 # Import the image of the mosaic graph about the predicted detractors across contextual factors
 knitr::include_graphics("Predicted.Detractors.png")
@@ -72,7 +81,6 @@ Based on this finding, stakeholders and the research team agreed to conduct a fo
 This project builds on the dataset from [Predicting Customer Detractors (Part 1). Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090), which contained information about contact reasons, contact methods, countries, and NPS scores of customers who contacted the customer service. 
 
 We apply the code below to retrieve this information (please refer to [Part 1](https://rpubs.com/galdovaldonavas/1335090) for full details in the dataset structure). 
-
 
 ```{r}
 
@@ -282,7 +290,6 @@ We can see that the database is created as expected:
 ## 4.2. Sampling to Manage Workload in Thematic Analysis
 
 Qualitative coding of open-text comments is time-consuming, since each comment must be read and classified manually. To make the workload feasible, we first checked the number of available cases in the two conditions of interest (chat cases involving incorrect item issues and chat cases involving other types of issues).
-
 
 ```{r}
 
@@ -525,7 +532,6 @@ The results are simulated as expected, with the following proportions:
 * 31% reported slow resolution,
 * 3% reported repeated information, and
 * 18% reported other types of complaints.
-
 
 
 # 5. Comparing the Presence of Complaints Across Conditions
@@ -806,12 +812,12 @@ We can see the data of the new variables was correctly simulated, with the follo
 
 To investigate whether the higher prevalence of slow resolution complaints in chat cases attending incorrect item issues can be attributed to specific addressable problems, we compare the frequencies of these issues across the two conditions.
 
+
 ## 6.3. Exploration with Descriptives
 
 We calculated the percentage of cases mentioning each type of problem across conditions and countries using the reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd), already specified in section 5.2. 
 
 For comparability with prior analyses, we also calculated the percentage of cases without any slow resolution complaints.
-
 
 ```{r}
 
@@ -832,10 +838,10 @@ prob.prop.df
 
 ```
 
+
 ## 6.3. Exploration with Visualizations
 
 To facilitate interpretation, we visualize the percentages of each problem type along with their 95% confidence intervals using bar graphs.
-
 
 ```{r}
 
@@ -905,7 +911,6 @@ We continue with formal testing of these differences.
 ## 6.4.  Modeling the Difference of Slow Resolution Problems Across Conditions
 
 To formally test these differences, we fit binomial logistic regression models predicting each type of slow resolution complaint from condition (incorrect item vs. other issues), controlling for country. Given similar proportions across countries, multicollinearity is not a concern.
-
 
 ```{r}
 ##-- Logistic Models for predicting different type of slow resolution complaints
@@ -1007,7 +1012,6 @@ The likelihood ratio test confirms that removing the country and condition varia
 
 We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of each problem is associated with detractors. For this, we use procedures and a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd), already specified in section 4.2.
 
-
 ```{r}
 
 #####
@@ -1094,7 +1098,6 @@ We define a reusable function to estimate the uncertainty of predicted outcomes 
 * 1. Simulate regression coefficients from the original model assuming a multivariate normal distribution.
 * 2. Bootstrap the sample to simulate the combination of problems for each subgroup.
 * 3. For each subgroup, calculate the predicted probability of the outcome across all simulated coefficient-sample combinations to obtain a sampling distribution, which is then summarized with medians and 95% confidence intervals.
-
 
 ```{r}
 
@@ -1246,13 +1249,12 @@ return (final.results)
 
 ```
 
-
 Now we are ready to apply the bootstrapping function to scenarios where specific problems are corrected. We start with photo issues, as they are the most common slow resolution problem.
+
 
 ## 7.2. Impact of Correcting Photo Issues
 
 We compare the current probability of being a detractor with the expected probability if photo issues were fully corrected.
-
 
 ```{r}
 
@@ -1431,7 +1433,7 @@ results.dist.differences
 
 ```
 
-The results indicate that we would expect a 1.41% less detractors within all customer service cases after the correction of the issue. 
+The results indicate that we would expect a 1.40% less detractors within all customer service cases after the correction of the issue. 
 
 
 ## 7.3. Comparing the Impact of Correcting Different Issues
@@ -1461,7 +1463,6 @@ impact.across.corrections
 ```
 
 We can also visualize these results in dot-and-whisker plot: 
-
 
 ```{r}
 # Create the dot-and-whisker plot
@@ -1739,14 +1740,12 @@ summary(data.2024)
 
 ```
 
-
 The data is simulated as expected. We can see a slightly lower percentage of detractors in the data for the whole year in comparison to the data for just the first semester. Let's analyze this difference with more detail. 
 
 
 ## 8.2. Exploration of the Change with Descriptives
 
 As a first exploration of the change in detractors after correcting the photo issue, we calculate the percentage of detractors across different weeks along the year. For this purpose, we use a reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd)
-
 
 ```{r}
 
@@ -1901,14 +1900,12 @@ chisq.test(with(data.2024, table(detractor, moment.photo.correction)))
 
 ```
 
-
-The results show that the decrease in detractors after correcting the photo issue was statistically significant. Interestingly, the observed reduction (about 2.4%) was even stronger than our prediction (about 1.6%).
+The results show that the decrease in detractors after correcting the photo issue was statistically significant. Interestingly, the observed reduction (about 2.4%) was even stronger than our prediction (about 1.4%).
 
 A plausible explanation is that our earlier prediction was based only on customers who explicitly reported the problem. In practice, however, the correction may have also benefited other customers indirectly affected by the issue, amplifying its positive impact. It is also important to consider that, since we do not have an experimental design, we cannot rule out that other improvements contributed to the reduction of detractors.
 
 
 #9. Discussion
-
 
 ## 9.1. Managerial Implications
 
