@@ -113,17 +113,13 @@ data$method <- factor(sample(c("chat", "web_form", "email", "phone"),
                              prob = c(0.40, 0.10, 0.15, 0.35),
                              replace = TRUE, size = data.n))
 
-# Dummy variables for method (reference: phone)
-data$chat <- ifelse(data$method == "chat", 1, 0)
-data$email <- ifelse(data$method == "email", 1, 0)
-data$web_form <- ifelse(data$method == "web_form", 1, 0)
-
 # Simulate country (two fictional countries for anonymity)
 data$country <- factor(sample(c("Drinkland", "Eatland"),
                               prob = c(0.5, 0.5),
                               replace = TRUE, size = data.n))
 
 data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
+
 
 # ------ 2. Customer Complaints
 
@@ -712,48 +708,46 @@ summary(m.other)
 
 ```
 
-As expected from the descriptive graphs, slow resolution complaints are significantly more frequent in chat cases involving incorrect item issues. Other types of complaints show smaller or negligible differences across conditions.
+As expected from the descriptive graphs, slow resolution complaints are significantly more frequent in chat cases involving incorrect item issues, while other types of complaints show smaller or negligible differences across conditions.
 
-Attending to this, we proceed to explore opportunities of improvements within the slow resolution complaints. 
-
-
-# 6. Thematic Analyses Within Slow Resolution Compalaints
-
-While slow resolution is the problem that appears to be the responsible of the high percentage of detractors involving chat cases attending incorrect item issues, it is important to deep dive more on the specific problems and opportunities related to these slow resolution issues. 
+Based on this observation, we proceed to examine more granular categories within slow resolution complaints to identify specific problems and opportunities for improvement.
 
 
-### 6.1. Data Simulation for the Qualitative Coding of Slow Resolution Complaints
+# 6. Thematic Analyses Within Slow Resolution Complaints
 
-We simulate the appearence of 4 type of problems identified in the qualitative coding: 
+Slow resolution complaints appear to be the primary driver of the high percentage of detractors in chat cases attending incorrect item issues. To better understand the underlying issues, we simulate the presence of four specific problems within these complaints:
 
-* Problems uploading photos in the chat. 
-* Slow procedures to check the customers' information. 
-* Problems fulfilling the promised deadlines. 
-* We also consider a category to keep slow resolution conmplaints with unspecified problems. 
+* Problems uploading photos in the chat.
 
-We assume that a single complaint may mention more than one specific problem. The simulation therefore proceeds in two steps:
+* Delays in verifying customer information.
 
-* 1. We first draw how many problems are mentioned within each comment (none, one, two, or three). 
+* Missed or delayed deadlines.
 
-* 2. We sample problems without replacement, with probabilities weighted by the case condition (incorrect item vs. other issue). We set a higher probability for problems uploading photos in incorrect item cases. 
+* Unspecified slow resolution issues.
+
+We simulate the coding in two steps:
+
+Determine how many specific problems are mentioned per comment (none, one, two, or three).
+
+Allocate problems without replacement, with probabilities weighted by case condition (higher probability of photo upload issues in incorrect item cases).
 
  
 ```{r}
 
-# 1) Create variables for each problem
+# 1) Initialize problem variables
 vars <- c("problem.photo","problem.info","problem.deadline","problem.unspecified")
 for(v in vars) data.ch.i[[v]] <- NA_real_
 
-# 2) Specify parameters for probability of problems within each condition. 
+# 2) Define probability distributions for number of problems per comment
 pk_other    <- c(`0` = 0.10, `1` = 0.70, `2` = 0.18, `3` = 0.02)   # other issues
 pk_incorrect<- c(`0` = 0.05, `1` = 0.70, `2` = 0.22, `3` = 0.03)   # incorrect item
 
-# 3) Specify the weights for each problem probability
+# 3) Define weighted probabilities for selecting each specific problem
 probs <- c("photo","info","deadline")
 w_other     <- c(photo = 0.05, info = 0.60, deadline = 0.35)       # other issues
 w_incorrect <- c(photo = 0.70, info = 0.20, deadline = 0.10)       # incorrect item
 
-# 4) Function for sampling without replacement
+# 4) Function: sample k items without replacement, weighted by probability
 sample_weighted_no_replace <- function(items, weights, k){
   if(k <= 0) return(character(0))
   picked <- character(0)
@@ -767,18 +761,18 @@ sample_weighted_no_replace <- function(items, weights, k){
   picked
 }
 
-# 5) Asignation of paramenters for cases with slow resolution complaints
+# 5) Assign problems for cases with slow resolution complaints
 idx <- which(data.ch.i$complain.sp.solve == 1)
 
 for(i in idx){
   cond <- data.ch.i$condition[i]
   
-  # Assignation depending on condition
+  # Select distribution parameters based on condition
   pk <- if(cond == "chat_incorrect_item") pk_incorrect else pk_other
   K <- as.integer(sample(as.integer(names(pk)), size = 1, prob = pk))
   w  <- if(cond == "chat_incorrect_item") w_incorrect else w_other
   
-  # Start with 0 for all variables
+  # Default: all problem variables = 0
   data.ch.i$problem.photo[i]       <- 0
   data.ch.i$problem.info[i]        <- 0
   data.ch.i$problem.deadline[i]    <- 0
@@ -805,23 +799,23 @@ summary(data.ch.i)
 
 ```
  
-We can see the data of the new variables was correctly simulated, with the following frequencies: 19% of cases complaining about problems loading photos, 12% about slow processes for checking the customer information, 8% about unfulfillment of the promissed deadlines, and 2% of cases having unespecified slow resolution issues. 
+We can see the data of the new variables was correctly simulated, with the following frequencies: 19% of cases complaining about problems loading photos, 12% about slow processes for checking customer information, 8% about unfulfillment of the promised deadlines, and 2% of cases reporting unspecified slow resolution issues.
+
 
 ## 6.2 Comparing the Presence of Slow Resolution Problems Across Conditions
 
-To investigate if the higher presence of slow resolution complaints in chat cases attending incorrect item issues can be explained by specific issues we can address, we explore the frequencies of these problems across the two conditions. 
+To investigate whether the higher prevalence of slow resolution complaints in chat cases attending incorrect item issues can be attributed to specific addressable problems, we compare the frequencies of these issues across the two conditions.
 
 ## 6.3. Exploration with Descriptives
 
-We calculated the percentage of cases mentioning each type of problem across conditions and countries using the reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd), already especified in section 5.2. 
+We calculated the percentage of cases mentioning each type of problem across conditions and countries using the reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd), already specified in section 5.2. 
 
-For comparability with prior analyses, we also calculated the percentage of absence of slow resolution complaints. 
-
+For comparability with prior analyses, we also calculated the percentage of cases without any slow resolution complaints.
 
 
 ```{r}
 
-# Create a variable that indicates the absence of slow resolution complains
+# Create a variable that indicates the absence of slow resolution complaints
 data.ch.i$no.complain.sp.solve <- NA_real_
 data.ch.i$no.complain.sp.solve [data.ch.i$complain.sp.solve == 1] <- 0
 data.ch.i$no.complain.sp.solve [data.ch.i$complain.sp.solve == 0] <- 1
@@ -840,7 +834,8 @@ prob.prop.df
 
 ## 6.3. Exploration with Visualizations
 
-To better understand how the differences between conditions in slow resolutions problems can be explained by specific problems, we visualize the above percentages and their 95% confidence intervals for each problem type, condition, and country
+To facilitate interpretation, we visualize the percentages of each problem type along with their 95% confidence intervals using bar graphs.
+
 
 ```{r}
 
@@ -851,8 +846,8 @@ prob.prop.df$dep.variable <- factor(prob.prop.df$dep.variable, levels = c("no.co
 # Titles for each faceted graph representing a type of complaint
 custom_titles <- c(
   no.complain.sp.solve = "No Complaints",
-  problem.photo   = "Chat Not Loading Photos",
-  problem.info    = "Slow Information Checks",
+  problem.photo   = "Problems Uploading Photos",
+  problem.info    = "Delays in Verifying Info",
   problem.deadline = "Unmet Deadlines",
   problem.unspecified   = "Unspecified Problems"
 )
@@ -875,7 +870,7 @@ ggplot(prob.prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
     title = "Problems in Slow Resolution Complaints"
   ) +
   scale_x_discrete(labels = c ("incorrect item", "other issue")) +
-  ylim(0, 110) +  
+  ylim(0, 110) +  # allow space for percentage labels above bars
   geom_text(
     aes(label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
     position = position_dodge(width = 0.8),   # match the dodge of bars
@@ -898,55 +893,55 @@ ggplot(prob.prop.df, aes(x = factor1, y = percentage, fill = factor2)) +
 
 ```
 
-We can see that cases attended by chat for incorrect items issues not only differ on having more complaints about slow resolution, but also on the nature of these complaints: 
+Cases attended by chat for incorrect item issues differ not only in having more slow resolution complaints, but also in the nature of these complaints:
 
-* most complaints in this condition are about about difficulties loading photos in the chat, which rarely appear in other issues. This difference made sense from the theoretical point of view of stakeholders, because users with incorrect items are requested to provide photos as a proof of having received the incorrect items, while this photo requirement is rare in other cases. 
+* Most complaints in this condition concern difficulties uploading photos, which are rare in other issues. This aligns with stakeholder expectations, as customers with incorrect items are asked to provide photos as proof, while this requirement is uncommon for other issues.
 
-* Slow information checks is also more common in this condition than in other issues. 
+* Delays in verifying customer information are also more common in this condition.
 
-We can continue with formal testing of these differences. 
+We continue with formal testing of these differences. 
 
 
 ## 6.4.  Modeling the Difference of Slow Resolution Problems Across Conditions
 
-To formally test the observations from the above graphs, we estimate binomial logistic regression models to predict each type of slow resolution complaint from whether chat cases involve incorrect item issues versus other issues, and controlling for country. 
+To formally test these differences, we fit binomial logistic regression models predicting each type of slow resolution complaint from condition (incorrect item vs. other issues), controlling for country. Given similar proportions across countries, multicollinearity is not a concern.
 
-Given that our subsamples have similar proportions across countries, multicollinearity is not expected to be an issue.
 
 ```{r}
 ##-- Logistic Models for predicting different type of slow resolution complaints
 
 # Problems loading the photo
-m.problem.photo <- glm (problem.photo ~ condition + country, data = data.ch.i)
+m.problem.photo <- glm (problem.photo ~ condition + country, data = data.ch.i, family = binomial)
 summary(m.problem.photo)
 
 # Problems of slow information check
-m.problem.info <- glm (problem.info ~ condition + country, data = data.ch.i)
+m.problem.info <- glm (problem.info ~ condition + country, data = data.ch.i, family = binomial)
 summary(m.problem.info)
 
 # Problems of unmet deadlines
-m.problem.deadline <- glm (problem.deadline ~ condition + country, data = data.ch.i)
+m.problem.deadline <- glm (problem.deadline ~ condition + country, data = data.ch.i, family = binomial)
 summary(m.problem.deadline)
 
 # Unspecified problems
-m.problem.unspecified <- glm (problem.unspecified ~ condition + country, data = data.ch.i)
+m.problem.unspecified <- glm (problem.unspecified ~ condition + country, data = data.ch.i, family = binomial)
 summary(m.problem.unspecified)
 
 
 ```
-The logistic models confirm the higher presence of photo problems and slow information checks problems in chat cases attending incorrect item issues than those attending other issues. 
+The logistic models confirm the higher presence of photo problems and slow information check problems in chat cases attending incorrect item issues compared to other issues.  
 
-Yet, to further investigate the extent to which these problems explain the high presence in detractors for chat cases attending incorrect item issues, we need to model, these effects. 
+To further understand to what extent these problems explain the high proportion of detractors in chat cases attending incorrect item issues, we proceed to model these effects.
 
 
 ## 6.5. Modeling the Effect of Problems Predicting Detractors
 
-To evaluate the impact of the problems on the likelihood to recommend we will use logistic binomial regression. 
+To evaluate the impact of the problems on the likelihood to recommend we will fit binomial logistic regression models predicting detractors from the specific slow resolution problems, condition, and country. 
 
 
 ### 6.5.1. Preliminary Explorations
 
-As preliminaries before modeling, We conduct a mosaic plot with all the considered predictors to identify collinearity issues and potential interactions between factors. Since we have many predictors, we do it in several phases:
+Before fitting the models, we conduct mosaic plots of all considered predictors to visually inspect collinearity and potential interactions. Given the number of predictors, we examine the mosaics in several steps.
+
 
 ```{r}
 ## Checking interactions between problems, countries and conditions
@@ -972,28 +967,29 @@ doubledecker(table.problems)
 
 
 ```
-We cannot identify relevant interactions between the factors used to predict detractors: aross different conditions and countries, the presence of each of the problems was generally associated with mostly all users being detractors. This ceiling effect makes it difficult to clearly observe whether the effects of the different problems interact with each other.
 
-We also do not identify any problems of collinearity beyond the already expected strong relation between problems loading photos and the incorrect items condition. Although we initially include the condition as a factor to illustrate how much its effect on predictors is explained by the problems, the condition factor will be eliminated in the final versions of the model. 
+We cannot identify relevant interactions between the factors used to predict detractors: across different conditions and countries, the presence of each of the problems is generally associated with most users being detractors. Furthermore, this ceiling effect makes it difficult to clearly observe whether the effects of the different problems interact with each other.
+
+We also do not identify any issues of collinearity beyond the expected strong relation between problems loading photos and the incorrect item condition. Although we initially include the condition factor to illustrate how much of its effect is explained by the problems, it will be removed in the final model.
 
 
 ### 6.5.2. Prediction Models
 
-We start exploring a model that includes all the potential predictors
+We start by fitting a model that includes all potential predictors to evaluate their individual contributions.
 
 ```{r}
 # Specify the model
 
-m.problems.sp.solve <- glm (detractor ~ problem.photo + problem.info + problem.deadline + country + condition, data = data.ch.i, family = "binomial")
+m.problems.sp.solve <- glm (detractor ~ problem.photo + problem.info + problem.deadline + country + condition, data = data.ch.i, family = binomial)
 summary(m.problems.sp.solve)
 
 ```
 
-The model indicates that the presence of all the problems expected are associated with a significantly higher probability of users becoming detractors. 
+The model indicates that the presence of all the expected problems is associated with a significantly higher probability of users becoming detractors. 
 
-Furthermore, once we account for these specific problems, the effect of condition is no longer significant, suggesting that we are accounting for the set of problems behind the higher presence of detractors in chat cases attending incorrect item issues. 
+Furthermore, once we account for these specific problems, the effect of condition is no longer significant, suggesting that these problems explain the higher presence of detractors in chat cases attending incorrect item issues. 
 
-To evaluate the effect of each problem with a more parsimonious model, we check the exclusion of the non significant factors. 
+To evaluate the effect of each problem with a more parsimonious model, we evaluate the fitting of a model excluding the non-significant factors.
 
 ```{r}
 # Specify the model
@@ -1006,19 +1002,13 @@ summary(m.problems.sp.solve2)
 anova(m.problems.sp.solve2 , m.problems.sp.solve, test = "Chisq")
 
 ```
-The likelihood ratio test confirms that removing the country and condition variables do not significantly reduce model fit. Therefore, we simplify the model by excluding them.
 
-We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of the problems are associated with detractors. For that, we use procedures and a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd), already specified in section 4.2. 
+The likelihood ratio test confirms that removing the country and condition variables does not significantly reduce model fit. Therefore, we keep this simplified model that excluedes them.
+
+We are now ready to derive meaningful metrics from the model to understand the extent to which the presence of each problem is associated with detractors. For this, we use procedures and a reusable function from my [toolkit for logistic regression](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Regression%20Modeling.%20Logistic%20Binomial.Rmd), already specified in section 4.2.
 
 
 ```{r}
-
-
-#####
-# Reusable function to calculate metrics in binomial models (probability predictions, risk rations, odds ratios)
-#####
-
-# The function has already been specified in section 4.2
 
 #####
 # Design Matrix for Predictions
@@ -1035,9 +1025,10 @@ names(my.matrix.df) <- c("case", f.names)
 
 
 #####
-# Calculation of the Metrics
+# Calculation of the Metrics (probability predictions, risk rations, odds ratios)
 #####
 
+# The function has already been specified in section 4.2
 # Apply the function to the final binomial model
 m.problems.sp.solve2.metrics.df <- f.metrics.binomial(m.problems.sp.solve2, my.matrix.df)
 
@@ -1046,9 +1037,11 @@ m.problems.sp.solve2.metrics.df
 
 ```
 
-We can see the presence of each of the slow resolution problems is strongly related with more detractors. We can better observe this relation with a plot that represents the expected percentages of detractors with a dot and the 95% CI of the percentages with whiskers. 
+We can see that the presence of each of the slow resolution problems is strongly associated with a higher likelihood of detractors. This relationship can be better visualized with a dot-and-whisker plot, where each dot represents the expected percentage of detractors and the whiskers represent the 95% confidence intervals.
+
 
 ```{r}
+
 # Add descriptive labels for each factor
 m.problems.sp.solve2.metrics.df$Label <- NA_character_
 m.problems.sp.solve2.metrics.df$Label[m.problems.sp.solve2.metrics.df$Term == "(Intercept)"] <- 
@@ -1079,35 +1072,28 @@ ggplot(m.problems.sp.solve2.metrics.df, aes(x = Prediction,
 
 We can see that When the slow resolution problems are present, nearly all users are expected to become detractors. This effect is similar for all slow resolution problems. In contrast, in the absence of the problems, only around 37% of the users are predicted to be detractors.
 
-We can further investigate the impact of correcting the problems. 
-
+We can further investigate the impact of correcting these problems. 
 
 
 # 7. Evaluating the Impact of Correcting Problems on Reducing Detractors
 
-To predict the impact of correcting problems, it is important to consider different factors:
+To predict the potential reduction in detractors by correcting problems, we need to consider: 
 
-* the extent to which we predict the problem can be corrected. 
+* The extent to which we predict the problems can be corrected.
+* The expected combination of problems across the population.
+* The effect of each combination on detractors.
+* The uncertainty associated with each of these predictions.
 
-* the expected combination of those problems across members of the population. 
-
-* the expected effect of those combinations of problems. 
-
-* the uncertainty we have for each the above predictions. 
-
-Since the combination of all of the levels of uncertainty is not expected to follow a normal distribution, we will use bootstrapping techniques to estimate the uncertainty of the final impact prediction.  
+Given that these uncertainties may not follow normal distributions, we will use bootstrapping to estimate the variability of the predicted impact.
 
 
-## 7.1. Bootstrapping Function to Estimate the Uncertainty of Our Predictions
+### 7.1. Bootstrapping Function to Estimate Prediction Uncertainty
 
-Before simulating scenarios in which we correct the problems, we create a function that help us calculate the uncertainty of our estimations for any scenario, either based on real results or in simulated ones. It follows the following procedures: 
+We define a reusable function to estimate the uncertainty of predicted outcomes for any scenario. The function works as follows:
 
-* 1. First, it estimates the coefficients for the relation of the problem and our predicted variable based on a priorly trained regression model (my.model), assuming multivariate normal distributions of those coefficients in a sample distribution of n samples (my.n).
-
-* 2. Secondly, it estimates the combination of problems in the population and the uncertainty of those combinations by simulating n bootstrapping samples (my.n) from our study sample (my.data), doing this process for each subgroup we want to especify that defines a different variation of these problems (my.factor)
-
-* 3. Thirdly, for each subgroup it calculates the final probability of the outcome and its uncertainty by obtaining a sampling distribution of these probabilities of n samples (my.n), which are derived of predicting the values for each of the n combination of coefficients obtained in point 1 and each of the n combination of problem probabilities obtained in point 2. 
-
+* 1. Simulate regression coefficients from the original model assuming a multivariate normal distribution.
+* 2. Bootstrap the sample to simulate the combination of problems for each subgroup.
+* 3. For each subgroup, calculate the predicted probability of the outcome across all simulated coefficient-sample combinations to obtain a sampling distribution, which is then summarized with medians and 95% confidence intervals.
 
 
 ```{r}
@@ -1261,32 +1247,40 @@ return (final.results)
 ```
 
 
+Now we are ready to apply the bootstrapping function to scenarios where specific problems are corrected. We start with photo issues, as they are the most common slow resolution problem.
+
 ## 7.2. Impact of Correcting Photo Issues
 
-Application for the present situation: 
+We compare the current probability of being a detractor with the expected probability if photo issues were fully corrected.
+
 
 ```{r}
-# Apply the formula
-sim.present <- f.bootstrap.predictions (my.n = 100,
+
+#####
+# 1. Obtaining estimations for the present situation
+#####
+
+# Apply the bootstrapping function to the present data
+sim.present <- f.bootstrap.predictions (my.n = 5000,
                         my.model = m.problems.sp.solve2, 
                         my.data = data.ch.i, 
                         my.factor = "condition")
 
-# Extract a dataframe indicating the moment
+# Extract a dataframe indicating the present moment
 present.df <- data.frame(moment = rep("present", nrow(sim.present$summary.df)))
 present.df <- cbind(present.df, sim.present$summary.df)
 
-```
 
-
-```{r}
+#####
+# 2. Obtaining estimations for the corrected scenario
+#####
 
 # Represent the problem photo as totally eliminated
 data.corrected <- data.ch.i
 data.corrected$problem.photo <- 0
 
 # Apply the formula
-sim.photo.corrected <- f.bootstrap.predictions (my.n = 100,
+sim.photo.corrected <- f.bootstrap.predictions (my.n = 5000,
                         my.model = m.problems.sp.solve2, 
                         my.data = data.corrected, 
                         my.factor = "condition")
@@ -1295,6 +1289,11 @@ sim.photo.corrected <- f.bootstrap.predictions (my.n = 100,
 photo.corrected.df <- data.frame(moment = rep("expected if photo issues are fixed", nrow(sim.photo.corrected$summary.df)))
 photo.corrected.df <- cbind(photo.corrected.df, sim.photo.corrected$summary.df)
 
+
+#####
+# 3. Save the results in a dataframe
+#####
+
 # Bind the results for the present and the photo correction simulations
 impact.photo.correction.df <- rbind(present.df, photo.corrected.df)
 
@@ -1302,11 +1301,13 @@ impact.photo.correction.df <- rbind(present.df, photo.corrected.df)
 # Express in percentages
 impact.photo.correction.df [, c(3:5)] <- impact.photo.correction.df [, c(3:5)] * 100
 impact.photo.correction.df
+
 ```
 
 
+### 7.2.1. Visualization of the Impact
 
-Graph the results
+To better illustrate the comparison of the present and the correction scenario, we can use a bar graph
 
 ```{r}
 # Setting the order of the complaints variables
@@ -1335,7 +1336,7 @@ ggplot(impact.photo.correction.df, aes(x = moment, y = estimate)) +
     y = "% of Detractors",
     title = "Impact of Correcting Photo Issues in Chat"
   ) +
-  scale_x_discrete(labels = c ("present", "after\ncorrection")) +
+  scale_x_discrete(labels = c ("Current", "After\nCorrection")) +
   ylim(0, 100) +  
   geom_text(
     aes(label = paste0(round(estimate, 0), "%")),         # label with percentage rounded
@@ -1355,15 +1356,21 @@ ggplot(impact.photo.correction.df, aes(x = moment, y = estimate)) +
 
 ```
 
+The impact of correcting photo issues in the chat can be huge for cases attending incorrect item issues, with an expected reduction from 65% to 51% in the percentage of detractors. 
 
-We can also express the impact in terms of expected percentage of decrease after the correction of the photo issue, using the bootstrapped results calculated earlier. We will calculate these perecentages within:
-- the cases of incorrect item issues attended by chat, which represent a 10% of total cases
-- the cases of other issues attended by chat, which represent a 30% of total cases
-- the total number of cases in customer service
+Yet, to better calculate the global impact, it can be beneficial to evaluate the % of detractors reduction within all customer service cases. 
+
+
+### 7.2.2. Expressing the Impact in Relation to All Customer Service Cases
+
+To calculate the overall impact in detractors reduction, we need to ponderate the results above by the percentage of cases in customer service that these scenarios represent. In coherence with Part 1, we will assume that: 
+
+* the cases of incorrect item issues attended by chat represent a 10% of total cases.
+* the cases of other issues attended by chat represent a 30% of total cases. 
 
 ```{r}
 
-# --- Extract the sampling distributions simulated for each scenario
+# --- 1. Extract the sampling distributions simulated for each scenario
 
 # Incorrect item issues for the present moment
 dist.present.ii <- sim.present[["chat_incorrect_itemresults"]][["bootstrap.sampling.dist"]]
@@ -1378,7 +1385,7 @@ dist.present.oi <- sim.present[["chat_other_issuesresults"]][["bootstrap.samplin
 dist.photo.corrected.oi <- sim.photo.corrected[["chat_other_issuesresults"]][["bootstrap.sampling.dist"]]
 
 
-# --- Express a function to calculate differences between two distributions
+# --- 2. Express a function to calculate differences between two distributions
 
 f.distribution.differences <- function(my.vector1, my.vector2) {
   
@@ -1404,15 +1411,14 @@ f.distribution.differences <- function(my.vector1, my.vector2) {
 # for incorrect item issues
 dist.differences.ii <- f.distribution.differences(dist.present.ii, dist.photo.corrected.ii)
 
-
 # for other issues
 dist.differences.oi <- f.distribution.differences(dist.present.oi, dist.photo.corrected.oi)
 
-
-# for the total - including uncertainty of the non significant context (other issues)
+# total (including uncertainty for other issues)
 dist.differences.total.inc <- f.distribution.differences ((dist.present.ii * 0.10 + dist.present.oi * 0.30), (dist.photo.corrected.ii * 0.10 + dist.photo.corrected.oi *0.30))
 
-# for the total - excluding uncertainty of the non significant context (other issues)
+# Since the reduction of detractors for other issues was not significant, we also calculate the total without considering the reduction in this factor, which can add unnecessary error in the predictions)
+# for the total - excluding uncertainty othe issues)
 dist.differences.total.ex <- f.distribution.differences ((dist.present.ii * 0.10), (dist.photo.corrected.ii * 0.10))
 
 
@@ -1425,24 +1431,21 @@ results.dist.differences
 
 ```
 
-We can see that after the correction of the photo issue, it is predicted a reduction of 16% in detractors within incorrect item issues, and a reduction of 0.2% in detractors for other issues. To further evaluate the impact, it would be interesting how these percentages translate within the total of clients we have. 
-
-Overall, we would expect 1.65% less detractors after the correction of the issue. 
+The results indicate that we would expect a 1.41% less detractors within all customer service cases after the correction of the issue. 
 
 
 ## 7.3. Comparing the Impact of Correcting Different Issues
 
-
-Similarly as it has been done for the correction of photo issues, could be done for other potential issues, so we can compare the expected reduction in total of detractors for the different decisions. Due to space limits, we will just simulate how this comparison could look. 
+Similarly to the procedure applied for correcting photo issues, we can calculate the expected impact of addressing other types of problems and compare them. Due to space constraints, we simulate how this comparison could look.
 
 
 ```{r}
-# Extract the results for the impact of correcting photo issues
 
+# Extract the results for the impact of correcting photo issues
 impact.across.corrections <- results.dist.differences [ 4, ]
 impact.across.corrections [1,1] <- "Issues loading photos in the chat"
 
-#Introduce made up results to display
+#Introduce made-up results to display
 impact.across.corrections [2, ] <- c ("Lag issues in the checking information tool", 1.23, 0.85, 1.55)
 impact.across.corrections [3, ] <- c ("Connectivity issues Drinkland", 0.84, 0.35, 1.35)
 impact.across.corrections [4, ] <- c ("Slow email responses", 0.60, 0.22, 1.01)
@@ -1450,12 +1453,12 @@ impact.across.corrections [4, ] <- c ("Slow email responses", 0.60, 0.22, 1.01)
 #Convert values to numeric
 impact.across.corrections [, 2:4] <- apply(impact.across.corrections[ ,2:4], 2, as.numeric)
 
+# Visualize the results
 rownames(impact.across.corrections) <- NULL
 impact.across.corrections
 
 
 ```
-
 
 We can also visualize these results in dot-and-whisker plot: 
 
@@ -1483,20 +1486,26 @@ ggplot(impact.across.corrections, aes(x = dif,
   )
 ```
 
+The comparison shows that correcting photo issues has the largest expected impact on reducing detractors, which can be considered to prioritize this correction.
 
-## 8. Following Up the Predictions
+However, it is important to note that simulations of future scenarios are unstable. It is important to follow them up with analyses once the corrections are applied.
 
-As in many predictions in social science and UX research, our predictions depends on many factors on out of our control, so it is specially important to continue evaluating the extent to which the predicted improvements were fulfilled. That way we can continue discovering new factors of influence and gain awareness about our potential to improve KPIs. 
 
-We will focus on following up our prediction about correcting the issue of loading photos, assuming it was corrected on November 1th
+# 8. Following Up the Prediction of Correcting Photo Issues
 
-### Simulating the data for the 2nd semester
+As an example, we illustrate a follow-up of the effect of correcting the issue of loading photos in the chat, assuming it was corrected on October 1st.
 
-We follow the same algorithms than for creating the data of the first semester used in the analyses, but with the exception that we reduce the number of complaints of slow resolution from October 1th, representing the date in which the corrections for uploading photos in the chat were introduced.  
+
+## 8.1.Simulating the Data After the Correction
+
+To the data we already had for the first semester, we simulate additional data for the second semester. The simulation is similar to the one in section 4.1, but applying a reduction in detractors after October 1st to represent the effect of correcting the photo issues. 
 
 
 ```{r}
 
+#####
+# Simulation of data for the second semester
+#####
 
 # Define dataset size 
 data.semester2.n <- 40000  # Large enough to allow subgroup analysis despite unbalanced category probabilities
@@ -1537,9 +1546,14 @@ data.semester2$country <- factor(sample(c("Drinkland", "Eatland"),
                               prob = c(0.5, 0.5),
                               replace = TRUE, size = data.semester2.n))
 
+data$country <- factor(data$country, levels = c("Eatland", "Drinkland"))
 
 
-# ------ 3. Customer Complaints
+# ------ 2. Customer Complaints
+# These variables represent underlying complaints that were not available at this stage of the investigation. We use them only to simulate NPS and satisfaction scores and store them in a separate dataframe to reflect their unavailability. 
+
+## Create a dataset to store the complaints in connection to the case id
+data.complaints2 <- data.frame(id = data.semester2$id)
 
 ## Complaints about connection issues
 # Base probability of a connection complaint: 10%
@@ -1550,7 +1564,7 @@ prob_connection[data.semester2$country == "Drinkland"] <- prob_connection[data.s
 prob_connection [prob_connection > 1] <- 1
 prob_connection [prob_connection < 0] <- 0
 # Generate binary variable based on probabilities
-data.semester2$complain.connect <- rbinom(n = data.semester2.n, size = 1, prob = prob_connection)
+data.complaints2$complain.connect <- rbinom(n = data.semester2.n, size = 1, prob = prob_connection)
 
 
 ## Complaints about slow response
@@ -1564,11 +1578,12 @@ prob_slow_response[data.semester2$method %in% c("chat", "web_form")] <- prob_slo
 prob_slow_response [prob_slow_response > 1] <- 1
 prob_slow_response [prob_slow_response < 0] <- 0
 # Generate binary variable
-data.semester2$complain.sp.respond <- rbinom(n = data.semester2.n, size = 1, prob = prob_slow_response)
+data.complaints2$complain.sp.respond <- rbinom(n = data.semester2.n, size = 1, prob = prob_slow_response)
 
-#######
-###### SPECIFIC CHANGES IN THE DATA SIMULATION FOR SLOW RESOLUTION COMPLAINTS
-#######
+
+#### SPECIFIC CHANGES FOR SLOW RESOLUTION COMPLAINTS ####
+# This part differs from the simulation of the first semester
+
 
 ## --- Complaints about slow resolution 
 
@@ -1608,11 +1623,10 @@ prob_slow_resolution [prob_slow_resolution > 1] <- 1
 prob_slow_resolution [prob_slow_resolution < 0] <- 0
 
 # Generate the binary variable for slow resolution complaints
-data.semester2$complain.sp.solve <- rbinom(n = data.semester2.n, size = 1, prob = prob_slow_resolution)
+data.complaints2$complain.sp.solve <- rbinom(n = data.semester2.n, size = 1, prob = prob_slow_resolution)
 
-#######
-###### From here the structure of the simulation is similar to the one used for the first semesterof 2024
-####### 
+####### END OF SPECIFIC CHANGES FOR SLOW RESOLUTION COMPLAINTS ####
+# From here, the simulation is similar as the first semester. 
 
 
 ## Complaints about having to repeat information
@@ -1624,16 +1638,13 @@ prob_repeat_info[data.semester2$reason == "cancellation"] <- prob_repeat_info[da
 prob_repeat_info [prob_repeat_info > 1] <- 1
 prob_repeat_info [prob_repeat_info < 0] <- 0
 # Generate binary variable
-data.semester2$complain.repeat <- rbinom(n = data.semester2.n, size = 1, prob = prob_repeat_info)
-# Check distribution across contact reasons
-with(data.semester2, prop.table(table(complain.repeat, reason), margin = 2))
+data.complaints2$complain.repeat <- rbinom(n = data.semester2.n, size = 1, prob = prob_repeat_info)
 
 
 ## Other types of complaints (uniform distribution)
 # Constant probability of 20% for other unspecified complaints
-data.semester2$complain.other <- rbinom(n = data.semester2.n, size = 1, prob = 0.20)
-# Check distribution
-with(data.semester2, prop.table(table(complain.other)))
+data.complaints2$complain.other <- rbinom(n = data.semester2.n, size = 1, prob = 0.20)
+
 
 
 # ------ 3. NPS scores
@@ -1648,11 +1659,11 @@ data.semester2$nps.score <- rnorm(data.semester2.n, mean = 9, sd = 2)
 # -2 for repeated information
 # -1 for other complaints
 data.semester2$nps.score <- data.semester2$nps.score -
-  3 * data.semester2$complain.connect -
-  4 * data.semester2$complain.sp.respond -
-  6 * data.semester2$complain.sp.solve -
-  2 * data.semester2$complain.repeat -
-  1 * data.semester2$complain.other 
+  3 * data.complaints2$complain.connect -
+  4 * data.complaints2$complain.sp.respond -
+  6 * data.complaints2$complain.sp.solve -
+  2 * data.complaints2$complain.repeat -
+  1 * data.complaints2$complain.other 
 
 # Ensure scores stay within the 0–10 range
 data.semester2$nps.score[data.semester2$nps.score < 0] <- 0
@@ -1680,9 +1691,6 @@ data.semester2$detractor <- NA_real_
 data.semester2$detractor[data.semester2$nps.segment == "detractor"] <- 1
 data.semester2$detractor[data.semester2$nps.segment != "detractor"] <- 0
 
-
-# Step 4: Check distribution across NPS segments
-with(data.semester2, prop.table(table(nps.segment)))
 
 
 #------ Satisfaction scores (1 to 5 scale)
@@ -1716,28 +1724,29 @@ na_randomizer <- sample(
   prob = c(0.1, 0.9)
 ) # Create a random vector (0 = missing, 1 = keep) for non-NA entries
 data.semester2$satisfaction[which(!is.na(data.semester2$satisfaction))[na_randomizer == 0]] <- NA_real_ # Apply randomizer
-with(data.semester2, prop.table(table(is.na(satisfaction), method, country), margin = 2:3)) # Check final distribution
 
 
-# Lastly, merge the databases for the 2 semesters to get a single dataset for the whole year
+#####
+# Saving the data for the whole year
+#####
+
+# Merge the databases for the 2 semesters
 data.2024 <- bind_rows(data, data.semester2)
 
 #Check the results for the whole dataset
-str(data.2024)
 summary(data.2024)
 
 
 ```
 
 
+The data is simulated as expected. We can see a slightly lower percentage of detractors in the data for the whole year in comparison to the data for just the first semester. Let's analyze this difference with more detail. 
 
 
+## 8.2. Exploration of the Change with Descriptives
 
-### Exploratory Follow Up
+As a first exploration of the change in detractors after correcting the photo issue, we calculate the percentage of detractors across different weeks along the year. For this purpose, we use a reusable function from my [R toolkit for percentages with 95% CI across multiple factors](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/blob/main/Toolkit/Percentages%20with%20CI%20Across%20Multiple%20Variables%20and%20Subgroups.Rmd)
 
-We can explore the changesin detractors after the correction of the issues loading the photos by exploring the weekly evolution of the percentage of detractors before and after introducing the correction on October 1st. 
-
-For that, we use a reusable function to obtain percentages and their confidence intervals across a factor
 
 ```{r}
 
@@ -1793,7 +1802,7 @@ f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
 }
 
 
-# --- 2. Apply the function to a factor that specifys the weeks 
+# --- 2. Apply the function to a factor that specifies the weeks 
 
 # Order the data by date to recognize more easy the weeks
 data.2024 <- data.2024[order(data.2024$date), ]
@@ -1817,33 +1826,27 @@ prop.detractors.by.week
 ```
 
 
-
-
-We can see that after October 1st there is a decreasing tendency in the detractors. We can see it more clearly if we create plot the results in a line graph: 
-
-
+We can see that after October 1st there is a decreasing tendency in the detractors. This trend becomes clearer when visualized in a line graph that shows the weekly percentages with their 95% confidence intervals, together with a marker of the correction date.
 
 
 ```{r}
 
-# Specify the correction date
+# Specify the date the correction was implemented
 date_correction <- as.Date("2024-09-30")
 
+# Create the line graph
 ggplot(prop.detractors.by.week, aes(x = factor, y = percentage)) +
   geom_line(color = "steelblue", linewidth = 1.2) +
     geom_point(aes(), color = "darkblue", alpha = 0.6) +
   geom_ribbon(aes(ymin = ci_lower.perc, ymax = ci_upper.perc), 
               alpha = 0.2, fill = "steelblue") +
-  
-  # LÍNEA VERTICAL de la corrección
+  # Vertical line to indicate the correction
   geom_vline(xintercept = date_correction, 
              color = "red", linewidth = 1, linetype = "dashed") +
-  
-  # ANOTACIÓN de la corrección
+  # Anotation of the correction
   annotate("text", x = date_correction, y = max(prop.detractors.by.week$percentage, na.rm = TRUE),
            label = "Correction of\nphoto issues", 
            hjust = -0.1, vjust = 1.2, color = "red", fontface = "bold", size = 4) +
-  
   scale_x_date(
     date_breaks = "1 month", 
     date_labels = "%b %Y",
@@ -1858,19 +1861,16 @@ ggplot(prop.detractors.by.week, aes(x = factor, y = percentage)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-
 ```
 
-We can see that in October there is a decrease in detractors that is maintained along the rest of the time, supporting the claim that the correction of the photo issues impacted the probability to recommend our customer service. 
+The graph depicts how the decrease in detractors after correcting the photo issue is maintained along the rest of the period, supporting the claim that this correction impacted the probability to recommend our customer service.
 
-Yet, we can benefit for further analyses that check if this change was significant.
+To further validate this claim, we can test its statistical significance. 
 
 
-# Testing the Significance of the Change Observed
+# Testing the Significance of the Detractors Reduction
 
-To check the statistical significance of this change, we compare the proportion of detractors before and after the correction of the photo issue on October 1st. 
-
-For that, we can see the percentages and their confidence intervals of these two periods, and a comparison with a Chi-Square test
+For this test, we compare the proportion of detractors before and after October 1st, the date of the correction. We first summarize the percentages and their confidence intervals for each period, and then formally evaluate the change with a Chi-Square test.
 
 ```{r}
 # Create a dicotomous variable for before and after the correction
@@ -1902,10 +1902,32 @@ chisq.test(with(data.2024, table(detractor, moment.photo.correction)))
 ```
 
 
-We can see that the decrease in detractors after correcting the photo issue was statistically significant, with a 2.4% reduction in detractors. This reduction was even stronger than our prediction (1.6 %). 
+The results show that the decrease in detractors after correcting the photo issue was statistically significant. Interestingly, the observed reduction (about 2.4%) was even stronger than our prediction (about 1.6%).
 
-A pontential explanation is that our prediction was only based on the people who stated the problem, but the number of customers affected by  the issue and its posterior correction is usually higher. 
-
-
+A plausible explanation is that our earlier prediction was based only on customers who explicitly reported the problem. In practice, however, the correction may have also benefited other customers indirectly affected by the issue, amplifying its positive impact. It is also important to consider that, since we do not have an experimental design, we cannot rule out that other improvements contributed to the reduction of detractors.
 
 
+#9. Discussion
+
+
+## 9.1. Managerial Implications
+
+The analyses indicate that correcting the photo issue in the chat service substantially reduced the percentage of detractors, both within the affected chat cases and in the overall customer service population. This means that targeted improvements in specific failure points can generate measurable gains in customer satisfaction and recommendation rates. For managers, this provides a clear business case: investing in resolving high-impact operational issues may translate into fewer detractors and a stronger brand reputation.
+
+
+## 9.2. Limitations
+
+It is important to recognize some limitations. First, the analyses are based on observational data, so other contextual factors (e.g., seasonality, parallel process improvements) might also contribute to the observed change. Second, some of our predictions were based on self-reported cases, which might underestimate the total number of customers affected. Finally, while we focused on detractors, other loyalty metrics (e.g., promoters, NPS distribution) could provide a more complete picture.
+
+
+## 9.3. Next Steps
+
+Future work could extend these analyses by:
+
+* Evaluating the impact of other operational fixes in parallel, to prioritize interventions by ROI.
+
+* Using more advanced causal inference techniques (e.g., difference-in-differences, synthetic control) to strengthen the causal attribution of changes.
+
+* Exploring heterogeneity across customer segments, to identify whether some groups benefited more strongly from the correction.
+
+These steps would allow companies not only to validate the robustness of the results, but also to scale the approach into a systematic framework for continuous service improvement.
