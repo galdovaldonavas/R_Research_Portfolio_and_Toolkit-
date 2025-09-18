@@ -25,7 +25,7 @@ The project was conducted in two phases:
 
 1. **Exploratory analysis** to identify areas needing improvement, based on internal data analysis and logistic regression modeling. This is the phase represented in this document. 
 
-2. **Identifying potential improvements and modeling their impact**, using text analysis and simulation to evaluate how addressing pain points could enhance customer perceptions. Due to length constraints, this second part is presented in a separate document: "Predicting Customer Detractors (Part 2): Assessing Improvement Opportunities via Text Analysis."
+2. **Identifying potential improvements and modeling their impact**, using text analysis and simulation to evaluate how addressing pain points could enhance customer perceptions. Due to length constraints, this second part is presented in a separate document:[Predicting Customer Detractors (Part 2): Opportunity Analysis from Open Feedback](https://rpubs.com/galdovaldonavas/1345416)
 
 Although based on a real-world project, all data, variables, and insights presented here have been simulated to maintain confidentiality.
 
