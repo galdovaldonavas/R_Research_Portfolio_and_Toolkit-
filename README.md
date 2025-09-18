@@ -43,6 +43,8 @@ I am continuously adding more projects and expanding the toolkit.
 
 📂 The R Markdown sources for all projects are available in the [Projects folder](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/tree/main/Projects).
 
+---
+
 ## Toolkit
 
 The [Toolkit](https://github.com/galdovaldonavas/R_Research_Portfolio_and_Toolkit-/tree/main/Toolkit) contains reusable functions and procedures for:  
