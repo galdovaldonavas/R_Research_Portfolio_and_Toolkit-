@@ -124,7 +124,7 @@ We simulate five types of customer complaints: connection issues, slow response,
 - **Repetition**: more likely when the contact reason is "cancellation"
 - **Other complaints**: uniformly distributed
 
-Please note that these variables represent underlying complaints that were not available at this stage of the investigation. We use them only to simulate NPS and satisfaction scores and store them in a separate dataframe to reflect their unavailability. They become visible only after thematic coding in the follow up project [Predicting Customer Detractors (Part 2): Opportunity Analysis from Open Feedback] (https://rpubs.com/galdovaldonavas/1335090)).
+Please note that these variables represent underlying complaints that were not available at this stage of the investigation. We use them only to simulate NPS and satisfaction scores and store them in a separate dataframe to reflect their unavailability. They become visible only after thematic coding in the follow up project [Predicting Customer Detractors (Part 2): Opportunity Analysis from Open Feedback](https://rpubs.com/galdovaldonavas/1335090)).
 
 
 ```{r}
