@@ -1,0 +1,583 @@
+---
+title: "Corporate Responsability Versus Easiness of E-Commerce Payments Methods: An Experimental Study"
+output:
+  html_notebook:
+    css: my_style.css
+    toc: true
+    toc_float: true
+    toc_depth: 2
+  pdf_document: default
+  html_document:
+    df_print: paged
+    self_contained: false
+    css: my_style.css
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+
+# 1. Introduction
+
+This case study evaluated the impact of adding a new payment method, "ControvPay", on customer perceptions. While such addition was expected to improve convenience, it could also provoke negative reactions due to ethical controversies associated with the provider. To understand this trade-off, we experimentally evaluated the payment method using a range of key metrics:
+
+* Perceived Ease of Use
+* Perceived Corporate Social Responsibility
+* Purchase Intention
+* Customer Loyalty
+* Payment Method Adoption
+
+The project's analyses include:
+
+* Data simulation and cleaning
+* Exploratory analysis with descriptive statistics and visualizations
+* Comparative analyses with linear regression
+* Simulation-based predictions
+
+Although based on a real-world project, all data and insights presented here have been simulated to ensure confidentiality.
+
+
+# 2. Setup
+
+We begin by loading the necessary R packages for data manipulation, visualization, and statistical modeling. 
+
+```{r}
+
+# Data handling
+library(dplyr)       # Data manipulation
+library(openxlsx)    # Open Excel files
+
+# Visualization
+library(ggplot2)     # General plotting
+library(vcd)         # Mosaic plots
+library(kableExtra)  # Table Formatting
+library(MASS)        # Simulation of multivariate distributions
+
+# Statistical analysis
+library(psych)       # Descriptive statistics
+
+```
+
+
+# 3. Data Simulation
+
+## 3.1. Methodological Brief
+
+The data for this study were collected through a survey experiment. Participants were randomly assigned to one of two conditions. In the first condition, they were shown an anonymous e-commerce platform that included a controversial payment method, ControvPay, alongside other standard options (Credit Card, ChisPay, and MegaPay). The second condition showed the exact same platform but without the ControvPay option. After viewing the platform, participants completed a series of questionnaires about their perceptions and demographic information.
+
+
+## 3.2. Experimental Assignment
+
+We began our data simulation by creating the random assignment for each customer into two experimental groups:
+
+* Control: Participants in this group viewed a payment page with only the standard payment options (Credit Card, ChisPay, and MegaPay).
+* Experimental: Participants in this group viewed the same payment page and options, with the addition of ControvPay.
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Define dataset size
+data.n <- 800
+
+# Initialize dataframe with IDs
+pay.df <- data.frame(id = factor(c(1:data.n)))
+
+# Create the factor about the experimental assignment
+pay.df$condition <- factor(sample(x = c("control", "experimental"), size = data.n, replace = TRUE))
+
+# Check the data distributions
+summary(pay.df)
+  
+```
+
+
+## 3.3. Customers' Information
+
+Beyond the basic demographic information, we also simulated a variable that represents the frequency of purchasing in the retailer during the last year. This question was asked together with other questions about purchasing frequency in other retailers to maintain anonymity and add context to the survey. 
+
+```{r}
+
+# Simulate age with a log-normal distribution, capped between 15 and 85
+pay.df$age <- round(rlnorm(n = data.n, meanlog = log(40), sdlog = log(1.4)))
+pay.df$age[pay.df$age > 85] <- 85
+pay.df$age[pay.df$age < 15] <- 15
+
+# Simulate gender
+pay.df$gender <- factor(sample(x = c("man", "woman"),
+                              size = data.n,
+                              replace = TRUE,
+                              prob = c(0.5, 0.5)))
+
+# Simulate frequency of purchasing in the retailer within the last year
+pay.df$freq.customer <- factor(sample(x = c("none", "1 time", "2-4 times", "5-9 times", "10 times or more"),
+                                      size = data.n,
+                                      replace = TRUE,
+                                      prob = c(0.5, 0.2, 0.15, 0.10, 0.05)
+                                      ), 
+                               ordered = TRUE, levels = c("none", "1 time", "2-4 times", "5-9 times", "10 times or more")
+                               )
+
+# Create a variable to indicate if the participant purchased from the retailer during the last year
+pay.df$customer <- rep(NA_real_, data.n)
+pay.df$customer [pay.df$freq.customer == "none"] <- 0
+pay.df$customer [pay.df$freq.customer %in% c("1 time", "2-4 times", "5-9 times", "10 times or more")] <- 1
+pay.df$customer <- as.integer(pay.df$customer)
+
+# Check the data distributions
+summary(pay.df)
+
+
+```
+
+
+## 3.4. Questionnaire Responses
+
+For each of the dependent variables, we will show the questionnaire items and their data simulation.
+
+For multi-item questionnaires, we simulate the Likert-type items with a function that uses multivariate distributions, with the package MASS
+
+```{r}
+
+# Specify function for the simulation of Likert-type items in a questionnaire
+
+  # Function name: f.sim.likert
+
+  # Input: 
+    # n: number of cases to simulate
+    # n.items: number of items to simulate
+    # mean: mean to simulate for the items
+    # sd: standard deviation to simulate for the items
+    # rounding: if TRUE, it rounds the scores and keeps them within the scale limits
+    # scale.max: maximum score of the items to simulate
+    # scale.min: minimun score of the items to simulate
+    # corr = correlation to simulate across scale items, 0.6 if nothing is specified
+
+  # Output: a simulated distribution of scores of Likert type items in a scale, using a multivariate distribution with the specified parameters. 
+
+f.sim.likert <- function(n, n.items, mean, sd, rounding = TRUE, scale.max, scale.min, corr = 0.6) {
+
+  # Make sure library MASS is installed and loaded
+  if (!requireNamespace("MASS", quietly = TRUE)) {
+    install.packages("MASS")
+  }
+  if (!"package:MASS" %in% search()) {
+    library(MASS, quietly = TRUE)
+  }
+  
+  # Specify the correlation matrix
+  cor.matrix <- matrix(corr, nrow = n.items, ncol = n.items)
+  diag(cor.matrix) <- 1
+  
+  # Specify the covariance matrix
+  cov.matrix <- cor.matrix * (sd^2)
+  diag(cov.matrix) <- sd^2
+  
+  # Simulate correlated scores
+  scores <- mvrnorm(n, mu = rep(mean, n.items), Sigma = cov.matrix)
+  
+  # Rounding and limiting scores if rounding is TRUE
+  if(rounding == TRUE) {
+    scores <- round(pmin(pmax(scores, scale.min), scale.max))
+  }
+  return(scores)
+}
+
+```
+
+Now we are ready to apply this function to the data simulation of the multi-item scales
+
+
+### 3.4.1. Perceived Corporate Social Responsibility
+
+The code below shows the questionnaire items used to measure the perception of social responsability of the website. 
+
+```{r}
+# Dataframe to display items
+measure.sr <- data.frame (Item = c("CSR1", "CSR2", "CSR3", "CSR4"),
+                          Text = c("I believe that this retailer ensures that the respect of ethical principles has priority over economic performance.", "I believe that this retailer permits ethical concerns to negatively affect economic performance.", "I believe that this retailer is committed to well-defined ethics principles.", "I believe that this retailer avoids compromising ethical standards in order to achieve corporate goals.")) 
+
+# 4. Conversion of the items dataframe to a table, including the measure description
+
+kable(measure.sr, "html", booktabs = TRUE,
+      caption = "Table 1. Perception of Social Responsibility") %>%
+  add_footnote(
+    label = "Note: The items were adapted from the scale by Maignan (2001). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (1 = strongly agree) to 7 (Completelly Agree)",
+    notation = "none"
+  )
+
+```
+
+We simulate the responses to the social responsability items with slightly lower responses in the experimental group, but only within those who are customers of the retailer. 
+
+```{r}
+
+# Use function in section 3.4 to simulate a preliminary distribution of scores (without any experimental effect)
+csr.scores <- f.sim.likert(n = data.n, 
+                           n.items = 4,
+                           mean = 5.5, 
+                           sd = 1.5,
+                           rounding = FALSE,
+                           scale.max = 7,
+                           scale.min = 1, 
+                           corr = 0.6)
+
+# Apply higher scores for the customers group assigned to the experimental group
+effect.size <- 0.3 
+csr.scores [pay.df$condition == "experimental" & pay.df$customer == 1] <- 
+  csr.scores [pay.df$condition == "experimental" & pay.df$customer == 1] - 
+  effect.size
+
+# Round the scores and constrain them within the scale limits
+csr.scores <- round(pmin(pmax(csr.scores, 1), 7))
+
+# Assign the scores to dataframe variables
+pay.df$csr1 <- csr.scores[, 1]
+pay.df$csr2 <- csr.scores[, 2]
+pay.df$csr3 <- csr.scores[, 3]
+pay.df$csr4 <- csr.scores[, 4]
+
+##
+# Check the distributions
+##
+
+# Set the graph objects to a 2x2 format
+par(mfrow =c(2,2))
+
+# Create histograms for each item
+barplot(table(pay.df$csr1))
+barplot(table(pay.df$csr2))
+barplot(table(pay.df$csr3))
+barplot(table(pay.df$csr4))
+
+# Correlations across items
+corr.test(pay.df[, c("csr1", "csr2", "csr3", "csr4")])
+
+# Item scores across condition and customer groups
+aggregate(pay.df$csr1, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$csr2, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$csr3, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$csr4, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+
+```
+
+The simulation is performed as expected, with a tendency to respond slightly lower for customers in the experimental condition. 
+
+
+### 3.4.2. Perceived Ease of Use
+
+The code below shows the questionnaire items used to measure the expected ease for the payment process. 
+
+```{r}
+
+# Dataframe to display items
+measure.eou <- data.frame(
+  Item = c("EOU1", "EOU2", "EOU3", "EOU4"),
+  Text = c(
+    "My interaction with the payment service will be clear and understandable.",
+    "Interacting with the payment service will not require a lot of my mental effort.",
+    "I expect to find the payment service easy to use.",
+    "I expect to find it easy to get the payment service to do what I want it to do."
+  )
+) 
+
+# Create the table
+kable(measure.eou, format = "html", 
+      caption = "Table 2. Perceived Ease of Use")  %>%
+  add_footnote(
+    label = "Note: The items were adapted from the Ease of Use scale by Venkatesh & Davis (2000). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (completely agree)",
+    notation = "none"
+  )
+
+```
+
+
+We simulate the responses to the ease of use items as totally independent of the experimental condition
+
+```{r}
+
+# Use function in section 3.4 to simulate a preliminary distribution of scores (without any experimental effect)
+eou.scores <- f.sim.likert(n = data.n, 
+                           n.items = 4,
+                           mean = 5, 
+                           sd = 1.5,
+                           rounding = TRUE,
+                           scale.max = 7,
+                           scale.min = 1, 
+                           corr = 0.6)
+
+# Assign the scores to dataframe variables
+pay.df$eou1 <- eou.scores[, 1]
+pay.df$eou2 <- eou.scores[, 2]
+pay.df$eou3 <- eou.scores[, 3]
+pay.df$eou4 <- eou.scores[, 4]
+
+##
+# Check the distributions
+##
+
+# Set the graph objects to a 2x2 format
+par(mfrow =c(2,2))
+
+# Create histograms for each item
+barplot(table(pay.df$eou1))
+barplot(table(pay.df$eou2))
+barplot(table(pay.df$eou3))
+barplot(table(pay.df$eou4))
+
+# Correlations across items
+corr.test(pay.df[, c("eou1", "eou2", "eou3", "eou4")])
+
+# Item scores across condition and customer groups
+aggregate(pay.df$eou1, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$eou2, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$eou3, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$eou4, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+
+
+```
+
+
+### 3.4.3. Purchase Intention
+
+The code below shows the questionnaire items used to measure the intention to purchase after seeing the payment options. 
+
+```{r}
+
+# Dataframe to display items
+measure.pi <- data.frame(
+  Item = c("PI1", "PI2"),
+  Text = c(
+    "I would intend to use the payment options.",
+    "I predict that I would use the payment options."
+  )
+) 
+
+kable(measure.pi, format = "html", 
+      caption = "Table 3. Purchase Intention")  %>%
+  add_footnote(
+    label = "Note: The items were adapted from the Intention to Purchase scale by Venkatesh & Davis (2000). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (completely agree)",
+    notation = "none"
+  )
+
+```
+
+We simulate the responses to the purchase intention items as moderately related to the perceived ease of use and slightly related to the perception of social responsability.
+
+```{r}
+# Use function in section 3.4 to simulate a preliminary distribution of scores
+pi.scores <- f.sim.likert(n = data.n, 
+                           n.items = 2,
+                           mean = 5, 
+                           sd = 1.2,
+                           rounding = FALSE,
+                           scale.max = 7,
+                           scale.min = 1, 
+                           corr = 0.6)
+##
+# Apply the relationship with ease of use and social responsability perceptions
+##
+
+# Define vectors for the standardized means of ease of use and social responsability
+csr.mean <- scale(rowMeans(pay.df[, c("csr1", "csr2", "csr3", "csr4")]))
+eou.mean <- scale(rowMeans(pay.df[, c("eou1", "eou2", "eou3", "eou4")]))
+
+# Define the effect sizes for perceptions of easiness and social responsability
+csr.effect.size <- 0.1
+eou.effect.size <- 0.3 
+
+# Apply the effects to each item
+for(i in 1:2) {
+  pi.scores[, i] <- pi.scores[, i] + csr.mean * csr.effect.size + eou.mean * eou.effect.size
+}
+
+# Round the scores and constrain them within the scale limits
+pi.scores <- round(pmin(pmax(pi.scores, 1), 7))
+
+# Assign the scores to dataframe variables
+pay.df$pi1 <- pi.scores[, 1]
+pay.df$pi2 <- pi.scores[, 2]
+
+
+##
+# Check the distributions
+##
+
+# Set the graph objects to a 2x2 format
+par(mfrow =c(1,2))
+
+# Create histograms for each item
+barplot(table(pay.df$pi1))
+barplot(table(pay.df$pi2))
+
+# Correlations across items
+corr.test(pay.df[, c("pi1", "pi2")])
+
+# Item scores across condition and customer groups
+aggregate(pay.df$pi1, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$pi2, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+
+```
+
+
+### 3.4.4. Customer Loyalty
+
+The code below shows the questionnaire items used to measure customer loyalty after seeing the payment options. 
+
+```{r}
+
+# Dataframe to display items
+# Customer Loyalty
+measure.cl <- data.frame(
+  Item = c("CL1", "CL2"),
+  Text = c(
+    "I will likely visit the website in the future.",
+    "How likely are you to recommend the website to a friend or colleague?"
+  )
+)
+
+kable(measure.cl, format = "html", 
+      caption = "Table 3. Cutomer Loyalty")  %>%
+  add_footnote(
+    label = "Note: The items were adapted from the Loyalty Scale of the SUPR-Q (Sauro, 2015). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (completely agree) for CL1, and from 1 (Not at all likely) to 7 (extremely likely) for CL2",
+    notation = "none"
+  )
+
+```
+
+
+We simulate the responses to the purchase intention items as moderately related to both perceived ease of use and the perception of social responsability.
+
+
+```{r}
+# Use function in section 3.4 to simulate a preliminary distribution of scores
+cl.scores <- f.sim.likert(n = data.n, 
+                           n.items = 2,
+                           mean = 4.2, 
+                           sd = 1.5,
+                           rounding = FALSE,
+                           scale.max = 7,
+                           scale.min = 1, 
+                           corr = 0.6)
+##
+# Apply higher scores for the customers group assigned to the experimental group
+##
+
+# In section 3.4.3 we already defined the vectors with the means for ease of use (eou_mean) and social responsability (csr_mean)
+
+# Define the effect sizes for perceptions of easiness and social responsability
+csr.effect.size <- 0.6
+eou.effect.size <- 0.6
+
+# Apply the effects to each item
+for(i in 1:2) {
+  cl.scores[, i] <- cl.scores[, i] + csr.mean * csr.effect.size + eou.mean * eou.effect.size
+}
+
+# Round the scores and constrain them within the scale limits
+cl.scores <- round(pmin(pmax(cl.scores, 1), 7))
+
+# Assign the scores to dataframe variables
+pay.df$cl1 <- cl.scores[, 1]
+pay.df$cl2 <- cl.scores[, 2]
+
+
+##
+# Check the distributions
+##
+
+# Set the graph objects to a 2x2 format
+par(mfrow =c(1,2))
+
+# Create histograms for each item
+barplot(table(pay.df$cl1))
+barplot(table(pay.df$cl2))
+
+# Correlations across items
+corr.test(pay.df[, c("cl1", "cl2")])
+
+# Item scores across condition and customer groups
+aggregate(pay.df$cl1, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$cl2, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+
+
+```
+
+
+```{r}
+
+# In section 3.4.3 we already defined the vectors with the means for ease of use (eou_mean) and social responsability (csr_mean)
+
+# Simulate the item scores and round them
+pay.df$cl1 <- round(
+  rnorm(data.n, mean = 4.2, sd = 1.5) +
+  0.30 * eou_mean -
+  0.30 * csr_mean
+)
+
+pay.df$cl2 <- round(pay.df$cl1 * rnorm(data.n, mean = 1, sd = 0.25))
+
+
+# Constrain the scores between 1 and 7
+# cl1
+pay.df$cl1 [pay.df$cl1 > 7] <- 7
+pay.df$cl1 [pay.df$cl1 < 1] <- 1
+# cl2
+pay.df$cl2 [pay.df$cl2 > 7] <- 7
+pay.df$cl2 [pay.df$cl2 < 1] <- 1
+
+
+# Check the simulations
+
+# histograms
+par(mfrow =c(1,2))
+barplot(table(pay.df$cl1))
+barplot(table(pay.df$cl2))
+# correlations
+corr.test(pay.df[, c("cl1", "cl2", "csr3", "eou3")])
+# comparason across conditions
+aggregate(pay.df$cl1, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+aggregate(pay.df$cl2, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
+
+```
+
+
+### 3.4.5. Payment Method Adoption
+
+The level of adoption of ControvPay was measured at the end of the survey with question that asked participants which method they would choose among ControvPay, Credit Card, ChisPay, and MegaPay. For the analyses, we simulate those who selected ControvPay, setting lower probabilities to select if participants belonged to the experimental condition and had provided low scores for social responsability. 
+
+```{r}
+
+#Set a reference probability for customers not affected by social responsability issues
+prob.adoption <- rep (0.15, data.n)
+
+# Reduce the probability for those in the experimental condition who scored low in social responability
+prob.adoption [pay.df$condition == "experimental" & csr_mean <= 3] <- 0.05
+
+# Save the average probability for the experimental condition
+prob.adoption.exp <- mean (prob.adoption[pay.df$condition == "experimental"])
+
+# Balance the probabilty across conditoins
+prob.adoption [pay.df$condition == "control"] <- prob.adoption.exp
+
+# Create the variable for adoption
+pay.df$adoption <- rbinom(n = data.n, size = 1, prob = prob.adoption.exp)
+
+with(pay.df, table(adoption, condition))
+
+```
+
+
+# Reliability Analyses
+
+We use Cronbach's Alpha to evaluate the internal reliability of the 4 multi-item questionnaires used for social responsability, percepcion of ease of use, purchase intention, and loyalty. 
+
+
+```{r}
+rel.csr <- alpha(x= pay.df [ , c("csr1", "csr2", "csr3", "csr4")])
+summary(rel.csr)
+
+```
+
+
