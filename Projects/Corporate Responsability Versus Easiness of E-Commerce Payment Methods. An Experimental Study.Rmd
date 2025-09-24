@@ -203,7 +203,7 @@ measure.sr <- data.frame (Item = c("CSR1", "CSR2", "CSR3", "CSR4"),
 kable(measure.sr, "html", booktabs = TRUE,
       caption = "Table 1. Perception of Social Responsibility") %>%
   add_footnote(
-    label = "Note: The items were adapted from the scale by Maignan (2001). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (1 = strongly agree) to 7 (Completelly Agree)",
+    label = "Note: The items were adapted from the scale by Maignan (2001). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (completely agree)",
     notation = "none"
   )
 
@@ -438,7 +438,7 @@ measure.cl <- data.frame(
 )
 
 kable(measure.cl, format = "html", 
-      caption = "Table 3. Cutomer Loyalty")  %>%
+      caption = "Table 4. Cutomer Loyalty")  %>%
   add_footnote(
     label = "Note: The items were adapted from the Loyalty Scale of the SUPR-Q (Sauro, 2015). Participants responded with a Likert-type scale from 1 (strongly disagree) to 7 (completely agree) for CL1, and from 1 (Not at all likely) to 7 (extremely likely) for CL2",
     notation = "none"
@@ -505,47 +505,9 @@ aggregate(pay.df$cl2, by = list (condition = pay.df$condition, customer = pay.df
 ```
 
 
-```{r}
-
-# In section 3.4.3 we already defined the vectors with the means for ease of use (eou_mean) and social responsability (csr_mean)
-
-# Simulate the item scores and round them
-pay.df$cl1 <- round(
-  rnorm(data.n, mean = 4.2, sd = 1.5) +
-  0.30 * eou_mean -
-  0.30 * csr_mean
-)
-
-pay.df$cl2 <- round(pay.df$cl1 * rnorm(data.n, mean = 1, sd = 0.25))
-
-
-# Constrain the scores between 1 and 7
-# cl1
-pay.df$cl1 [pay.df$cl1 > 7] <- 7
-pay.df$cl1 [pay.df$cl1 < 1] <- 1
-# cl2
-pay.df$cl2 [pay.df$cl2 > 7] <- 7
-pay.df$cl2 [pay.df$cl2 < 1] <- 1
-
-
-# Check the simulations
-
-# histograms
-par(mfrow =c(1,2))
-barplot(table(pay.df$cl1))
-barplot(table(pay.df$cl2))
-# correlations
-corr.test(pay.df[, c("cl1", "cl2", "csr3", "eou3")])
-# comparason across conditions
-aggregate(pay.df$cl1, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
-aggregate(pay.df$cl2, by = list (condition = pay.df$condition, customer = pay.df$customer), mean)
-
-```
-
-
 ### 3.4.5. Payment Method Adoption
 
-The level of adoption of ControvPay was measured at the end of the survey with question that asked participants which method they would choose among ControvPay, Credit Card, ChisPay, and MegaPay. For the analyses, we simulate those who selected ControvPay, setting lower probabilities to select if participants belonged to the experimental condition and had provided low scores for social responsability. 
+The level of adoption of ControvPay was measured at the end of the survey with question that asked participants which method they would choose among the ones presented. For the analyses, we simulate those who selected ControvPay in the experimental condition, setting lower probabilities to select it if participants provided low scores for social responsability. 
 
 ```{r}
 
@@ -553,31 +515,64 @@ The level of adoption of ControvPay was measured at the end of the survey with q
 prob.adoption <- rep (0.15, data.n)
 
 # Reduce the probability for those in the experimental condition who scored low in social responability
-prob.adoption [pay.df$condition == "experimental" & csr_mean <= 3] <- 0.05
-
-# Save the average probability for the experimental condition
-prob.adoption.exp <- mean (prob.adoption[pay.df$condition == "experimental"])
-
-# Balance the probabilty across conditoins
-prob.adoption [pay.df$condition == "control"] <- prob.adoption.exp
+prob.adoption [pay.df$condition == "experimental" & csr.mean <= 3] <- 0.05
 
 # Create the variable for adoption
-pay.df$adoption <- rbinom(n = data.n, size = 1, prob = prob.adoption.exp)
+pay.df$adoption <- rbinom(n = data.n, size = 1, prob = prob.adoption)
 
+# Set the value to NA for the control condition, since they were not offered the option to choose ControvPay
+pay.df$adoption [pay.df$condition == "control"] <- NA_real_
+
+# Check the distribution
 with(pay.df, table(adoption, condition))
 
 ```
 
 
-# Reliability Analyses
+# 4. Reliability Analyses
 
-We use Cronbach's Alpha to evaluate the internal reliability of the 4 multi-item questionnaires used for social responsability, percepcion of ease of use, purchase intention, and loyalty. 
+We use Cronbach's Alpha to evaluate the internal reliability of the multi-item questionnaire (social responsability, percepcion of ease of use, purchase intention, and loyalty). 
 
 
 ```{r}
+
+# Social responsability
 rel.csr <- alpha(x= pay.df [ , c("csr1", "csr2", "csr3", "csr4")])
 summary(rel.csr)
 
+# Ease of use
+rel.eou <- alpha(x= pay.df [ , c("eou1", "eou2", "eou3", "eou4")])
+summary(rel.eou)
+
+# Purchase intention
+rel.pi <- alpha(x= pay.df [ , c("pi1", "pi2")])
+summary(rel.pi)
+
+# Customer Loyalty
+rel.cl <- alpha(x= pay.df [ , c("cl1", "cl2")])
+summary(rel.cl)
+
+
 ```
+
+The four scales show acceptable levels of internal reliability (Cronbach's Alpha > 0.70), so we proceed to calculate the average of the items in each scale as single scale measurements. 
+
+```{r}
+
+# Create variables with the average of the scales' items
+pay.df$social.responsability <- rowMeans(pay.df[, c("csr1", "csr2", "csr3", "csr4")])
+pay.df$ease <- rowMeans(pay.df[, c("eou1", "eou2", "eou3", "eou4")])
+pay.df$purchase.intention <- rowMeans(pay.df[, c("pi1", "pi2")])
+pay.df$loyalty <- rowMeans(pay.df[, c("cl1", "cl2")])
+
+# Visualize the distributions
+hist(pay.df$social.responsability)
+hist(pay.df$ease)
+hist(pay.df$purchase.intention)
+hist(pay.df$loyalty)
+
+
+```
+
 
 
