@@ -51,10 +51,15 @@ library(openxlsx)    # Open Excel files
 library(ggplot2)     # General plotting
 library(vcd)         # Mosaic plots
 library(kableExtra)  # Table Formatting
-library(MASS)        # Simulation of multivariate distributions
+library(beanplot)    # Density distributions
+
 
 # Statistical analysis
 library(psych)       # Descriptive statistics
+library(MASS)        # Simulation of multivariate distributions
+library(car)         # Scatterplot matrices
+library(corrplot)    # Correlation plots
+library(effectsize)  # Effect size calculations
 
 ```
 
@@ -293,7 +298,7 @@ kable(measure.eou, format = "html",
 ```
 
 
-We simulate the responses to the ease of use items as totally independent of the experimental condition
+We simulate the responses to the ease of use items as totally independent of the experimental condition, and inversely correlated with age
 
 ```{r}
 
@@ -301,11 +306,21 @@ We simulate the responses to the ease of use items as totally independent of the
 eou.scores <- f.sim.likert(n = data.n, 
                            n.items = 4,
                            mean = 5, 
-                           sd = 1.5,
+                           sd = 1.6,
                            rounding = TRUE,
                            scale.max = 7,
                            scale.min = 1, 
                            corr = 0.6)
+
+# Apply higher scores for younger customers
+age.effect.size <- 0.04 
+
+for(i in 1:ncol(eou.scores)) {
+  eou.scores[, i] <- eou.scores[, i] - pay.df$age * age.effect.size
+}
+
+# Round the scores and constrain them within the scale limits
+eou.scores <- round(pmin(pmax(eou.scores, 1), 7))
 
 # Assign the scores to dataframe variables
 pay.df$eou1 <- eou.scores[, 1]
@@ -388,7 +403,7 @@ csr.effect.size <- 0.1
 eou.effect.size <- 0.3 
 
 # Apply the effects to each item
-for(i in 1:2) {
+for(i in 1:ncol(pi.scores)) {
   pi.scores[, i] <- pi.scores[, i] + csr.mean * csr.effect.size + eou.mean * eou.effect.size
 }
 
@@ -471,7 +486,7 @@ csr.effect.size <- 0.6
 eou.effect.size <- 0.6
 
 # Apply the effects to each item
-for(i in 1:2) {
+for(i in 1:ncol(cl.scores)) {
   cl.scores[, i] <- cl.scores[, i] + csr.mean * csr.effect.size + eou.mean * eou.effect.size
 }
 
@@ -565,7 +580,14 @@ pay.df$ease <- rowMeans(pay.df[, c("eou1", "eou2", "eou3", "eou4")])
 pay.df$purchase.intention <- rowMeans(pay.df[, c("pi1", "pi2")])
 pay.df$loyalty <- rowMeans(pay.df[, c("cl1", "cl2")])
 
-# Visualize the distributions
+# Move the item variables to another dataset to keep the main database cleaner
+# Correct using base R
+item.names <- c("csr1", "csr2", "csr3", "csr4", "eou1", "eou2", "eou3", "eou4", "pi1", "pi2", "cl1", "cl2")
+items.df <- pay.df[, (names(pay.df) %in% item.names)]
+pay.df <- pay.df[, !(names(pay.df) %in% item.names)]
+
+# Check the dataset
+summary(pay.df)
 hist(pay.df$social.responsability)
 hist(pay.df$ease)
 hist(pay.df$purchase.intention)
@@ -573,6 +595,181 @@ hist(pay.df$loyalty)
 
 
 ```
+
+
+
+# 5. Sample Demographics
+
+To obtain a comprehensive summary of our sample, we applied: 
+
+* the summary() function, which provides frequencies for our factor variables
+* the describe() function from the psych package, which provides means, standard deviations and other statistics for numeric variables. We can also look at the mean for categorical variables as indicators of the proportions. 
+
+```{r}
+# Information for numeric variables
+describe(pay.df)
+
+# Information for categorical variables
+summary(pay.df)
+
+```
+
+The sample results indicated that: 
+ * gender categories were evenly distributed across our sample, with approximate 50% of men and 50% of women. 
+ * The average age of participants is 43 years (sd = 14.41), varying within 85 and 16 years. 
+ * Half of the sample are customers from the retailer, who at least bought one time to the retailer in the last year. 
+ * The sample is evenly assigned to the control and the experimental condition, each group composing 50% of participants. 
+ 
+Yet, to make sure the results we obtained about the comparison across customers and experimental groups are reliable, we needed to check for demotragphic differences across those groups and the potential effect of the demographic variables on our outcomes. 
+
+
+# 6. Checks for Balanced Comparisons
+
+## 6.1. Balance in Experimental Assignment
+
+We assessed whether the control and experimental groups differed on age, gender, or customer status using descriptive statistics, visualizations, and statistical tests (chi-square tests for categorical variables, independent t-tests for age).
+
+```{r}
+
+# Obtain general descriptives by experimental condition
+describeBy(pay.df[, c("age", "gender", "customer")], group = pay.df$condition)
+
+# Check for statistical differences in age with an independent samples t-test
+t.test(age ~ condition, data = pay.df)
+cohens_d(age ~ condition, data = pay.df)
+
+# Check for statistical differences in gender with a chi square test
+table.gender.condition <- with (pay.df, table(gender,condition))
+chisq.test(table.gender.condition)
+
+# Check for statistical differences in customers ratio with a chi-square test
+table.customer.condition <- with (pay.df, table(customer,condition))
+chisq.test(table.customer.condition)
+
+
+# Obtain visualizations
+
+par(mfrow = c(1, 3))
+boxplot(age ~ condition, data = pay.df, main = "Age by Condition")
+barplot(table.gender.condition, beside = TRUE, main = "Gender Distribution")
+barplot(table.customer.condition, beside = TRUE, main = "Gender Distribution")
+par(mfrow = c(1, 1))
+
+```
+
+The two experimental gropus are similar in terms of age, gender, and customers ratio. Yet, since we are also considering being a customer as a potential interaction factor, we also check the assignment balance within customers and non customer.
+
+
+## 6.2. Balance in Customers Groups
+
+We assessed whether the customer groups within the control and experimental groups differed on age and gender using descriptive statistics, visualizations, and statistical tests (chi-square test for gender, factorial ANOVA test for age).
+
+```{r}
+
+# Obtain general descriptives by condition and customer groups
+describeBy(pay.df[, c("age", "gender")], group = list(pay.df$condition, pay.df$customer))
+
+# Factorial ANOVA for testing differences across age
+age_anova <- aov(age ~ condition * customer, data = pay.df)
+summary(age_anova)
+age.eta.squared <- eta_squared(age_anova, partial = TRUE) 
+age.eta.squared
+
+# Chi-square for genders  
+# We first create a variable grouping participants by both experimental group and customer group
+pay.df$condition.customer <- rep(NA_character_, nrow(pay.df))
+pay.df$condition.customer [pay.df$condition == "experimental" & pay.df$customer == 1] <- "exp.customers"
+pay.df$condition.customer [pay.df$condition == "experimental" & pay.df$customer == 0] <- "exp.non.customers"
+pay.df$condition.customer [pay.df$condition == "control" & pay.df$customer == 1] <- "ct.customers"
+pay.df$condition.customer [pay.df$condition == "control" & pay.df$customer == 0] <- "ct.non.customers"
+pay.df$condition.customer <- factor(pay.df$condition.customer)
+
+
+# Chi-square
+table.gender.condition.customer <- with (pay.df, table(gender, condition.customer))
+chisq.test(table.gender.condition.customer)
+
+
+# Visualization for the four groups
+
+# Set more margins in the bottom
+par(mar = c(8, 4.1, 4.1, 2.1)) 
+
+# Age by 2x2 groups
+boxplot(age ~ condition.customer, data = pay.df,
+        main = "Age Distribution by Condition × Customer",
+        las = 2) # Rotate x-axis labels
+
+
+
+# Gender proportions by 2x2 groups
+barplot(table.gender.condition.customer, beside = TRUE,
+        main = "Gender by Condition × Customer",
+        legend.text = TRUE)
+
+par(mar = c(5.1, 4.1, 4.1, 2.1)) 
+
+```
+
+The factorial ANOVA revealed no significant interaction between condition and customer status for age (F(1, 796) = X.XX, p = .XXX), and the chi-square test showed no significant association between the combined condition-customer groups and gender distribution (χ²(3) = X.XX, p = .XXX). This indicates successful balance across all four experimental cells, supporting the internal validity of subsequent comparisons
+
+Yet, the comparisons can become more rigorous if we also account for potential effects of the demographic variables in our outcomes, as we can always expect some level of unbalance between conditions even if differences were not significant. 
+
+
+## 6.2. Control of Demographics Effects
+
+To identify any relevant effect on the demographic variables on the outcomes, we evaluate the correlations between these two types of variables, which we can observe in the correlation matrix, in a scatterplot matrix or in a correlation plot. 
+
+```{r}
+# Extract a dataframe with the variables to correlate
+cor.df <- pay.df [ , c("age", "gender", "condition", "customer", "social.responsability", "ease", "purchase.intention", "loyalty")]
+cor.df$gender <- as.numeric(ifelse(cor.df$gender == "woman", 0,1))
+cor.df$condition <- as.numeric(ifelse(cor.df$condition == "control", 0,1))
+
+
+# Correlation matrix 
+corr.test (cor.df, use = "complete.obs")
+
+# Scatterplot matrix
+scatterplotMatrix (cor.df, use = "complete.obs")
+
+# Correlation plot
+corrplot.mixed(corr = cor(cor.df, use = "complete.obs"), upper = "ellipse")
+```
+
+Correlation analysis revealed that age was significantly associated with ease of use (r = -0.XX, p < .001), purchase intention (r = -0.XX, p < .001), and loyalty (r = -0.XX, p < .001). In contrast, gender showed no significant correlations with any outcome variables (all p > .05). Based on these findings, age will be included as a covariate in sensitivity analyses involving the affected outcome variables.
+
+
+# 7. Experimental Effects Analysis
+
+In this section, we evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only. We also examine whether these experimental effects vary depending on participants' customer status (current customers vs. non-customers).
+
+To ensure the validity of our causal inferences, we first verify that the random assignment created balanced comparison groups on key demographic variables.
+
+
+
+
+
+
+
+
+
+
+
+To evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only, we started employing a 2×2 factorial Analysis of Variance (ANCOVA). This design allowed us to test both the main effect of the experimental condition and its potential interaction with participants' customer status (current customers vs. non-customers of the retailer), while controlling for potential confounding effects of age and gender as covariates.
+
+Specifically, the analysis addresses three key questions:
+
+* 1. Does the presence of ControvPay influence consumer perceptions and intentions?
+* 2. Do these effects differ between existing customers and non-customers?
+* 3. How robust are these findings when accounting for demographic covariates?
+
+
+## 5.1. Check of Normality Assumption
+
+
+
+
 
 
 
