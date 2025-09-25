@@ -29,9 +29,12 @@ This case study evaluated the impact of adding a new payment method, "ControvPay
 
 The project's analyses include:
 
-* Data simulation and cleaning
-* Exploratory analysis with descriptive statistics and visualizations
-* Comparative analyses with linear regression
+* Data simulation and cleaning. 
+* Reliability analysis. 
+* Exploratory analysis with descriptive statistics, visualizations. 
+* Balanced-comparison checks with basic inferential tests (chi-square, t-test, ANOVA, correlations). 
+* Comparative analyses with factorial ANOVA and ANCOVA models. 
+* Sensitivity analyses with Bayesian modeling. 
 * Simulation-based predictions
 
 Although based on a real-world project, all data and insights presented here have been simulated to ensure confidentiality.
@@ -588,10 +591,7 @@ pay.df <- pay.df[, !(names(pay.df) %in% item.names)]
 
 # Check the dataset
 summary(pay.df)
-hist(pay.df$social.responsability)
-hist(pay.df$ease)
-hist(pay.df$purchase.intention)
-hist(pay.df$loyalty)
+
 
 
 ```
@@ -652,7 +652,7 @@ chisq.test(table.customer.condition)
 par(mfrow = c(1, 3))
 boxplot(age ~ condition, data = pay.df, main = "Age by Condition")
 barplot(table.gender.condition, beside = TRUE, main = "Gender Distribution")
-barplot(table.customer.condition, beside = TRUE, main = "Gender Distribution")
+barplot(table.customer.condition, beside = TRUE, main = "Customer Distribution")
 par(mfrow = c(1, 1))
 
 ```
@@ -737,39 +737,217 @@ scatterplotMatrix (cor.df, use = "complete.obs")
 corrplot.mixed(corr = cor(cor.df, use = "complete.obs"), upper = "ellipse")
 ```
 
-Correlation analysis revealed that age was significantly associated with ease of use (r = -0.XX, p < .001), purchase intention (r = -0.XX, p < .001), and loyalty (r = -0.XX, p < .001). In contrast, gender showed no significant correlations with any outcome variables (all p > .05). Based on these findings, age will be included as a covariate in sensitivity analyses involving the affected outcome variables.
+Correlation analysis revealed that age was significantly associated with ease of use, purchase intention, and loyalty. In contrast, gender showed no significant correlations with any outcome variables (all p > .05). Based on these findings, age will be included as a covariate in sensitivity analyses involving the affected outcome variables.
 
 
 # 7. Experimental Effects Analysis
 
-In this section, we evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only. We also examine whether these experimental effects vary depending on participants' customer status (current customers vs. non-customers).
-
-To ensure the validity of our causal inferences, we first verify that the random assignment created balanced comparison groups on key demographic variables.
-
-
-
-
-
-
-
-
-
-
-
-To evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only, we started employing a 2×2 factorial Analysis of Variance (ANCOVA). This design allowed us to test both the main effect of the experimental condition and its potential interaction with participants' customer status (current customers vs. non-customers of the retailer), while controlling for potential confounding effects of age and gender as covariates.
+To evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only, we used several 2×2 factorial Analysis of Variance (ANOVA). This design allowed us to test both the main effect of the experimental condition and its potential interaction with participants' customer status (current customers vs. non-customers of the retailer). Additionally, we were able to use sensitivity analyses with ANCOVA models that controlled for potential confounding effects of age as covariate.
 
 Specifically, the analysis addresses three key questions:
 
 * 1. Does the presence of ControvPay influence consumer perceptions and intentions?
 * 2. Do these effects differ between existing customers and non-customers?
-* 3. How robust are these findings when accounting for demographic covariates?
+* 3. How robust are the results when controlling for the effect of age?
+
+We started by checking the normality assumption for conducting ANOVA testS. 
 
 
-## 5.1. Check of Normality Assumption
+## 7.1. Checking the Normality Assumption
+
+To evaluate the normality assumption, we conducted histograms, normal Q-Q plots, and indexes of skewness and kurtosis. 
+
+```{r}
+
+# Skewness and kurtosis
+
+normality.indexes.df <- describe (pay.df[ , c("social.responsability", "ease", "purchase.intention", "loyalty")])
+normality.indexes.df <- normality.indexes.df [ , c("skew", "kurtosis")]
+normality.indexes.df 
+
+# Prepare the output for 4 plots
+par(mfrow = c(2, 2))
+
+# Histograms
+hist(pay.df$social.responsability)
+hist(pay.df$ease)
+hist(pay.df$purchase.intention)
+hist(pay.df$loyalty)
+
+
+# QQ plots
+
+# Social responsability
+qqnorm(pay.df$social.responsability, main = "social responsability")
+qqline(pay.df$social.responsability)
+
+# Ease of use
+qqnorm(pay.df$ease, main = "ease of use")
+qqline(pay.df$ease)
+
+# Purchase intention
+qqnorm(pay.df$purchase.intention, main = "purchase intention")
+qqline(pay.df$purchase.intention)
+
+# Loyalty
+qqnorm(pay.df$loyalty, main = "loyalty")
+qqline(pay.df$loyalty)
+
+```
+
+The distributions of purchase intentions and loyalty approximate closely to their theoretical normal distributions. The histogram for social responsability and ease of use perceptions suggest respectively  ceiling and bottom effects, leading to skewness. Yet, this level of skewness appears to be tolerable, as indicated by skewness indexes within the +/- 1 range, and QQplots where the distribution approximates to the theoretical normal distribution. We then proceed with the ANOVA models for all variables, as ANOVA is robust to moderate levels of normality deviations in large samples.  
+
+
+## 7.2. Factorial Anova Models
+
+To perform the 2 (condition: experimental versus control) x 2 (retailer customer: customer versus non customer) factorial ANOVA, across our four dependent variables, we used a reusable function from my Tookit, expecified below. 
+
+  descriptives <- list()
+  tukey.results <- list ()
+
+```{r}
+
+f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
+  
+  # Initiate lists to save different type of results
+  anova.results <- list()
+  a <- 1
+  descriptive.results <- list()
+  d <- 1
+  
+  # Obtain the levels of the factors
+  f1.levels <- unique (my.data[[my.factor1]])
+  f2.levels <- unique (my.data[[my.factor2]])
+  
+  # Initiate a loop for each dv
+  for (dv in my.dv.list) {
+    
+    #--- 1. Metrics for the ANOVA models
+    
+    # Build a dynamic formula
+    anova.formula <- as.formula (paste0(dv, "~", my.factor1, "*", my.factor2))
+
+    # Fit the ANOVA model
+    anova.model <- aov(anova.formula, data = my.data)
+    
+    # Extract the model in a dataframe
+    anova.table <- anova(anova.model)
+    
+    # Bind the anova table with a dataframe that contains the dv names
+    anova.result.df <- data.frame (dep.variable = rep(dv, nrow(anova.table)), 
+                                    effect = rownames(anova.table))
+    anova.result.df <- bind_cols (anova.result.df, anova.table)
+    
+    # Add the eta squared (Proportional Reduction in Error)
+    ss.total <- sum(anova.table[ , "Sum Sq"]) # sum of error
+    anova.result.df$eta.squared <- anova.result.df[["Sum Sq"]] / ss.total
+    
+    # Save the results
+    anova.results [[a]] <- anova.result.df
+    a <- a + 1
+    
+    
+    #--- 2. Descriptive Statistics
+    
+    # Open a loop for factor 1
+    for (f1.level in f1.levels){
+      
+      # Create a vector with the scores of each level in factor 1
+      current.vector <- my.data[my.data[[my.factor1]] == f1.level , dv]
+      
+      # Clean missind data
+      current.vector.c <- current.vector[!is.na(current.vector)]
+      
+      # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+      mean.level <- mean(current.vector.c)
+      sd.level <- sd(current.vector.c)
+      n.level <- length(current.vector.c)
+      se.level <- sd.level / sqrt(n.level)
+      upper.ci.level <- mean.level + 1.96 * se.level
+      lower.ci.level <- mean.level - 1.96 * se.level
+      
+      # Save the results
+      level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1 = f1.level,
+        factor2 = paste0 ("all"),
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level
+      )
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+    
+    } # Close the loop for factor 1
+    
+} # close the dv loop
+  
+  ###
+  #--- Save all the results
+  ###
+  
+  #--- ANOVA Results
+  
+  # Group the anova results in a dataframe
+  anova.results.df <- do.call(rbind, anova.results)
+  rownames(anova.results.df) <- NULL
+  
+  # Round the data columns
+  numeric.cols <- sapply(anova.results.df, is.numeric)
+  anova.results.df[numeric.cols] <- round(anova.results.df[numeric.cols], 3)
+  
+  
+  #--- Descriptive Results
+  
+  # Group the descriptives for all levels
+  descriptives.df <- do.call(rbind, descriptive.results)
+  
+  # Round the columns
+  numeric.cols <- sapply(descriptives.df, is.numeric)
+  descriptives.df[numeric.cols] <- round(descriptives.df[numeric.cols], 2)
+  
+  
+  #--- List with all the results
+  results <- list(anova = anova.results.df, 
+                  descriptives = descriptives.df)
+  
+  # Return the results
+  return(results)
+
+}
+
+
+```
+
+
+Usage
+
+
+```{r}
+
+dv.variables <- c("social.responsability", "ease", "purchase.intention", "loyalty")
+
+pay.results <- f.factorial.anova (
+  my.data = pay.df,
+  my.dv.list = dv.variables,
+  my.factor1 = "condition",
+  my.factor2 = "customer"
+)
+
+pay.descriptives.df <- pay.results$descriptives
+pay.descriptives.df
+
+pay.anova.df <- pay.results$anova
+pay.anova.df
+```
 
 
 
-
-
-
+anova.result <- anova(anova.model)
+> anova.df <- as.data.frame(anova.result)
+> print(anova.df)
 
