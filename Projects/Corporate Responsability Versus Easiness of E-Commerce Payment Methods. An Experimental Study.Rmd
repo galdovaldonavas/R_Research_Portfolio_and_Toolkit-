@@ -129,9 +129,10 @@ pay.df$freq.customer <- factor(sample(x = c("none", "1 time", "2-4 times", "5-9 
 
 # Create a variable to indicate if the participant purchased from the retailer during the last year
 pay.df$customer <- rep(NA_real_, data.n)
-pay.df$customer [pay.df$freq.customer == "none"] <- 0
-pay.df$customer [pay.df$freq.customer %in% c("1 time", "2-4 times", "5-9 times", "10 times or more")] <- 1
-pay.df$customer <- as.integer(pay.df$customer)
+pay.df$customer [pay.df$freq.customer == "none"] <- "no"
+pay.df$customer [pay.df$freq.customer %in% c("1 time", "2-4 times", "5-9 times", "10 times or more")] <- "yes"
+pay.df$customer <- factor (pay.df$customer)
+
 
 # Check the data distributions
 summary(pay.df)
@@ -233,8 +234,8 @@ csr.scores <- f.sim.likert(n = data.n,
 
 # Apply higher scores for the customers group assigned to the experimental group
 effect.size <- 0.3 
-csr.scores [pay.df$condition == "experimental" & pay.df$customer == 1] <- 
-  csr.scores [pay.df$condition == "experimental" & pay.df$customer == 1] - 
+csr.scores [pay.df$condition == "experimental" & pay.df$customer == "yes"] <- 
+  csr.scores [pay.df$condition == "experimental" & pay.df$customer == "yes"] - 
   effect.size
 
 # Round the scores and constrain them within the scale limits
@@ -545,6 +546,9 @@ pay.df$adoption [pay.df$condition == "control"] <- NA_real_
 with(pay.df, table(adoption, condition))
 
 ```
+*******revisar*****
+******
+******
 
 
 # 4. Reliability Analyses
@@ -678,10 +682,10 @@ age.eta.squared
 # Chi-square for genders  
 # We first create a variable grouping participants by both experimental group and customer group
 pay.df$condition.customer <- rep(NA_character_, nrow(pay.df))
-pay.df$condition.customer [pay.df$condition == "experimental" & pay.df$customer == 1] <- "exp.customers"
-pay.df$condition.customer [pay.df$condition == "experimental" & pay.df$customer == 0] <- "exp.non.customers"
-pay.df$condition.customer [pay.df$condition == "control" & pay.df$customer == 1] <- "ct.customers"
-pay.df$condition.customer [pay.df$condition == "control" & pay.df$customer == 0] <- "ct.non.customers"
+pay.df$condition.customer [pay.df$condition == "experimental" & pay.df$customer == "yes"] <- "exp.customers"
+pay.df$condition.customer [pay.df$condition == "experimental" & pay.df$customer == "no"] <- "exp.non.customers"
+pay.df$condition.customer [pay.df$condition == "control" & pay.df$customer == "yes"] <- "ct.customers"
+pay.df$condition.customer [pay.df$condition == "control" & pay.df$customer == "no"] <- "ct.non.customers"
 pay.df$condition.customer <- factor(pay.df$condition.customer)
 
 
@@ -725,6 +729,7 @@ To identify any relevant effect on the demographic variables on the outcomes, we
 cor.df <- pay.df [ , c("age", "gender", "condition", "customer", "social.responsability", "ease", "purchase.intention", "loyalty")]
 cor.df$gender <- as.numeric(ifelse(cor.df$gender == "woman", 0,1))
 cor.df$condition <- as.numeric(ifelse(cor.df$condition == "control", 0,1))
+cor.df$customer <- as.numeric(ifelse(cor.df$customer == "no", 0,1))
 
 
 # Correlation matrix 
@@ -884,6 +889,81 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
     
     } # Close the loop for factor 1
     
+    
+    # Open a loop for factor 2
+    for (f2.level in f2.levels){
+      
+      # Create a vector with the scores of each level in factor 2
+      current.vector <- my.data[my.data[[my.factor2]] == f2.level , dv]
+      
+      # Clean missind data
+      current.vector.c <- current.vector[!is.na(current.vector)]
+      
+      # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+      mean.level <- mean(current.vector.c)
+      sd.level <- sd(current.vector.c)
+      n.level <- length(current.vector.c)
+      se.level <- sd.level / sqrt(n.level)
+      upper.ci.level <- mean.level + 1.96 * se.level
+      lower.ci.level <- mean.level - 1.96 * se.level
+      
+      # Save the results
+      level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1 = paste0 ("all"),
+        factor2 = f2.level,
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level
+      )
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+      
+      } # Close the loop for factor 2
+    
+    
+      # Open loops for the interaction
+
+      for (f1.level in f1.levels){
+        for (f2.level in f2.levels){
+      
+        # Create a vector with the scores of the interaction level
+        current.vector <- my.data [my.data[[my.factor1]] == f1.level &  my.data[[my.factor2]] == f2.level, dv ]
+      
+        # Clean missind data
+        current.vector.c <- current.vector[!is.na(current.vector)]
+      
+        # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+        mean.level <- mean(current.vector.c)
+        sd.level <- sd(current.vector.c)
+        n.level <- length(current.vector.c)
+        se.level <- sd.level / sqrt(n.level)
+        upper.ci.level <- mean.level + 1.96 * se.level
+        lower.ci.level <- mean.level - 1.96 * se.level
+      
+        # Save the results
+        level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1 = f1.level,
+        factor2 = f2.level,
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level
+      )
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+    
+    } # Close the loop of factor 1 in the interaction loops
+      }  # Close the loop of factor 2 in the interaction loop
+    
 } # close the dv loop
   
   ###
@@ -909,6 +989,10 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   # Round the columns
   numeric.cols <- sapply(descriptives.df, is.numeric)
   descriptives.df[numeric.cols] <- round(descriptives.df[numeric.cols], 2)
+  
+  # Rename the factor columns
+  names (descriptives.df)[names(descriptives.df) == "factor1"] <- my.factor1
+  names (descriptives.df)[names(descriptives.df) == "factor2"] <- my.factor2
   
   
   #--- List with all the results
@@ -943,11 +1027,23 @@ pay.descriptives.df
 
 pay.anova.df <- pay.results$anova
 pay.anova.df
+
+
 ```
 
 
 
-anova.result <- anova(anova.model)
-> anova.df <- as.data.frame(anova.result)
-> print(anova.df)
+```{r}
+# Ejemplo con 2 niveles
+set.seed(123)
+datos <- data.frame(
+  condition = factor(rep(c("A", "B"), each = 50)),
+  score = c(rnorm(50, mean = 10), rnorm(50, mean = 12))
+)
+
+modelo <- aov(score ~ condition, data = datos)
+tukey.result <- TukeyHSD(modelo)
+print(tukey.result)
+```
+
 
