@@ -815,10 +815,14 @@ To perform the 2 (condition: experimental versus control) x 2 (retailer customer
 f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   
   # Initiate lists to save different type of results
-  anova.results <- list()
+  anova.results <- list() # to keep ANOVA results
   a <- 1
-  descriptive.results <- list()
+  descriptive.results <- list() # to keep descriptives
   d <- 1
+  tukey.results <- list() # to keep Tukey results
+  t <- 1
+  
+  
   
   # Obtain the levels of the factors
   f1.levels <- unique (my.data[[my.factor1]])
@@ -827,7 +831,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   # Initiate a loop for each dv
   for (dv in my.dv.list) {
     
-    #--- 1. Metrics for the ANOVA models
+    
+#--- 1. Metrics for the ANOVA models
     
     # Build a dynamic formula
     anova.formula <- as.formula (paste0(dv, "~", my.factor1, "*", my.factor2))
@@ -852,7 +857,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
     a <- a + 1
     
     
-    #--- 2. Descriptive Statistics
+    
+#--- 2. Descriptive Statistics
     
     # Open a loop for factor 1
     for (f1.level in f1.levels){
@@ -964,6 +970,25 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
     } # Close the loop of factor 1 in the interaction loops
       }  # Close the loop of factor 2 in the interaction loop
     
+    
+    
+#--- 3. Posthoc Comparison with Tukey
+    
+    # Obtain the Tukey results
+    tukey <- TukeyHSD(anova.model)
+    
+    # Bind the comparisons for main effects and interaction effects in a single dataframe
+    for (name.effect in names(tukey)) {
+      
+      # Extract the comparisons for the effect
+      tukey.df <- as.data.frame(tukey[[name.effect]])
+      tukey.df$dep.variable <- dv
+      tukey.df$effect <- name.effect
+      tukey.df$comparison <- rownames(tukey.df)
+      tukey.results [[t]] <- tukey.df
+      t <- t + 1
+    } # Close the loop for the Tukey effect
+    
 } # close the dv loop
   
   ###
@@ -995,9 +1020,22 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   names (descriptives.df)[names(descriptives.df) == "factor2"] <- my.factor2
   
   
+  #--- Tukey Results
+  
+  # Group all the Tukey results
+  tukey.results.df <- do.call(rbind, tukey.results)
+  rownames(tukey.results.df) <- NULL
+  
+  # Reorder the columns
+  index.tukey <- tukey.results.df [ , c("dep.variable", "effect", "comparison")]
+  tukey.results.df[ , c("dep.variable", "effect", "comparison")] <- NULL
+  tukey.results.df <- bind_cols(index.tukey, tukey.results.df)
+
   #--- List with all the results
+  
   results <- list(anova = anova.results.df, 
-                  descriptives = descriptives.df)
+                  descriptives = descriptives.df,
+                  tukey = tukey.results.df)
   
   # Return the results
   return(results)
@@ -1022,11 +1060,16 @@ pay.results <- f.factorial.anova (
   my.factor2 = "customer"
 )
 
+pay.anova.df <- pay.results$anova
+pay.anova.df
+
 pay.descriptives.df <- pay.results$descriptives
 pay.descriptives.df
 
-pay.anova.df <- pay.results$anova
-pay.anova.df
+pay.tukey.df <- pay.results$tukey
+pay.tukey.df
+
+
 
 
 ```
@@ -1035,15 +1078,40 @@ pay.anova.df
 
 ```{r}
 # Ejemplo con 2 niveles
-set.seed(123)
-datos <- data.frame(
-  condition = factor(rep(c("A", "B"), each = 50)),
-  score = c(rnorm(50, mean = 10), rnorm(50, mean = 12))
-)
 
-modelo <- aov(score ~ condition, data = datos)
-tukey.result <- TukeyHSD(modelo)
+modelo.prueba <- aov(social.responsability ~ condition * customer, data = pay.df)
+tukey.result <- TukeyHSD(modelo.prueba)
 print(tukey.result)
+
+names(tukey.result)
+
+effect.table <- as.data.frame(tukey.result[["condition:customer"]])
+
+effect.table$effect <- "condition:customer"
+
+effect.table$comparison <- rownames(effect.table)
+effect.table
+```
+```{r}
+
+# Dentro de tu loop para cada DV:
+
+# Tukey HSD para el modelo completo
+tukey.result <- TukeyHSD(anova.model)
+
+# Extraer TODAS las comparaciones posibles
+# Esto funcionará sin importar si los factores tienen 2 o más niveles
+tukey.df <- data.frame()
+for (effect.name in names(tukey.result)) {
+  effect.table <- as.data.frame(tukey.result[[effect.name]])
+  effect.table$effect <- effect.name
+  effect.table$comparison <- rownames(effect.table)
+  tukey.df <- rbind(tukey.df, effect.table)
+}
+
+tukey.df$dep.variable <- dv
+
+
 ```
 
 
