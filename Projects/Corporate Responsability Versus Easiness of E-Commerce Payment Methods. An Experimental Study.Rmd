@@ -819,6 +819,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   a <- 1
   descriptive.results <- list() # to keep descriptives
   d <- 1
+  cohen.d.results <- list() # to keep cohen d results
+  c <- 1
   tukey.results <- list() # to keep Tukey results
   t <- 1
   
@@ -860,6 +862,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
     
 #--- 2. Descriptive Statistics
     
+    # -- 2.1. Descriptives for factor 1
+    
     # Open a loop for factor 1
     for (f1.level in f1.levels){
       
@@ -894,8 +898,93 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
       d <- d + 1
     
     } # Close the loop for factor 1
+     
+    # - 2.1.1. Cohen's d for post-hoc comparisons in factor1
+    
+    # Extract the descriptives for factor 1
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                   data.groups.to.compare$factor2 == "all", ]
+    
+    # Obtain the number of groups (and rows)
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Specify function for Cohen d calculation
+    f.cohen.d.calculation <- function (groups.data, groups.matrix, dv.name, effect.name) {
+    
+      # Create a list to store the results
+      fd.results.list <- list()
+      fd <- 1 # index for the above list
+    
+      # Open a loop for each comparison
+      for (i.comparison in 1:nrow(groups.matrix)){
+      
+        # Obtain the group indexes to compare
+        index.g1 <- groups.matrix [i.comparison, 1]
+        index.g2 <- groups.matrix [i.comparison, 2]
+      
+        # Obtain the names of groups compared
+        name.g1 <- groups.data [index.g1, "factor1"]
+        name.g2 <- groups.data [index.g2, "factor1"]
+      
+        # Obtain the means of groups compared
+        mean.g1 <- groups.data [index.g1, "mean"]
+        mean.g2 <- groups.data [index.g2, "mean"]
+      
+        # Obtain the sd of groups compared
+        sd.g1 <- groups.data [index.g1, "sd"]
+        sd.g2 <- groups.data [index.g2, "sd"]
+      
+        # Obtain the n of groups compared
+        n.g1 <- groups.data [index.g1, "n"]
+        n.g2 <- groups.data [index.g2, "n"]     
+      
+        # Calculate the pooled standard deviation
+        pooled.sd <- sqrt(((n.g1 - 1) * sd.g1^2 + (n.g2 - 1) * sd.g2^2) / (n.g1 + n.g2 - 2))
+      
+        # Calculate Cohen's d
+        cohen.d <- (mean.g1 - mean.g2)/ pooled.sd
+      
+        # Save the results for each comparison
+        comparison.cohen.d.result <- data.frame (
+          dep.variable = dv.name,
+          effect = effect.name,
+          group1 = name.g1,
+          group2 = name.g2,
+          d = cohen.d, 
+          sd.pooled = pooled.sd
+        )
+        fd.results.list [[fd]] <- comparison.cohen.d.result
+        fd <- fd + 1
+      
+      } # Close the loop within the f.cohen.d.calculation   
+      
+      d.function.results <- do.call(rbind, fd.results.list)
+      
+    # Return the result for the effect
+    return (d.function.results)
+   
+    } # Close the f.cohen.d.calculation function
+      
+    # Apply the function to calculate the d results for factor 1
+    factor1.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = my.factor1
+    )
+    
+    # Save the d results for the factor 1  groups
+    cohen.d.results[[c]] <- factor1.d.results
+    c <- c + 1
+     
     
     
+    # -- 2.2. Descriptives for factor 2
+      
     # Open a loop for factor 2
     for (f2.level in f2.levels){
       
@@ -930,6 +1019,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
       d <- d + 1
       
       } # Close the loop for factor 2
+    
+    
     
     
       # Open loops for the interaction
@@ -1020,6 +1111,13 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   names (descriptives.df)[names(descriptives.df) == "factor2"] <- my.factor2
   
   
+  #--- Cohen's d Results
+  
+  # Group the d results for all comparisons
+  cohen.d.df <- do.call(rbind, cohen.d.results)
+  
+  
+  
   #--- Tukey Results
   
   # Group all the Tukey results
@@ -1035,6 +1133,7 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   
   results <- list(anova = anova.results.df, 
                   descriptives = descriptives.df,
+                  cohen.d = cohen.d.df,
                   tukey = tukey.results.df)
   
   # Return the results
@@ -1066,6 +1165,9 @@ pay.anova.df
 pay.descriptives.df <- pay.results$descriptives
 pay.descriptives.df
 
+pay.d.df <- pay.results$cohen.d
+pay.d.df
+
 pay.tukey.df <- pay.results$tukey
 pay.tukey.df
 
@@ -1076,42 +1178,19 @@ pay.tukey.df
 
 
 
+pruebas
+
 ```{r}
-# Ejemplo con 2 niveles
+# Para 3 grupos
+grupos <- 1:3
+combinations.matrix <- as.data.frame(t(combn(1:nrow(pay.anova.df), 2)))
+combinaciones
 
-modelo.prueba <- aov(social.responsability ~ condition * customer, data = pay.df)
-tukey.result <- TukeyHSD(modelo.prueba)
-print(tukey.result)
 
-names(tukey.result)
-
-effect.table <- as.data.frame(tukey.result[["condition:customer"]])
-
-effect.table$effect <- "condition:customer"
-
-effect.table$comparison <- rownames(effect.table)
-effect.table
-```
-```{r}
-
-# Dentro de tu loop para cada DV:
-
-# Tukey HSD para el modelo completo
-tukey.result <- TukeyHSD(anova.model)
-
-# Extraer TODAS las comparaciones posibles
-# Esto funcionará sin importar si los factores tienen 2 o más niveles
-tukey.df <- data.frame()
-for (effect.name in names(tukey.result)) {
-  effect.table <- as.data.frame(tukey.result[[effect.name]])
-  effect.table$effect <- effect.name
-  effect.table$comparison <- rownames(effect.table)
-  tukey.df <- rbind(tukey.df, effect.table)
-}
-
-tukey.df$dep.variable <- dv
 
 
 ```
+
+
 
 
