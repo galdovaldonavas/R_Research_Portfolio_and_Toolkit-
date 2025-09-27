@@ -824,96 +824,12 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   tukey.results <- list() # to keep Tukey results
   t <- 1
   
-  
-  
   # Obtain the levels of the factors
   f1.levels <- unique (my.data[[my.factor1]])
   f2.levels <- unique (my.data[[my.factor2]])
   
-  # Initiate a loop for each dv
-  for (dv in my.dv.list) {
-    
-    
-#--- 1. Metrics for the ANOVA models
-    
-    # Build a dynamic formula
-    anova.formula <- as.formula (paste0(dv, "~", my.factor1, "*", my.factor2))
-
-    # Fit the ANOVA model
-    anova.model <- aov(anova.formula, data = my.data)
-    
-    # Extract the model in a dataframe
-    anova.table <- anova(anova.model)
-    
-    # Bind the anova table with a dataframe that contains the dv names
-    anova.result.df <- data.frame (dep.variable = rep(dv, nrow(anova.table)), 
-                                    effect = rownames(anova.table))
-    anova.result.df <- bind_cols (anova.result.df, anova.table)
-    
-    # Add the eta squared (Proportional Reduction in Error)
-    ss.total <- sum(anova.table[ , "Sum Sq"]) # sum of error
-    anova.result.df$eta.squared <- anova.result.df[["Sum Sq"]] / ss.total
-    
-    # Save the results
-    anova.results [[a]] <- anova.result.df
-    a <- a + 1
-    
-    
-    
-#--- 2. Descriptive Statistics
-    
-    # -- 2.1. Descriptives for factor 1
-    
-    # Open a loop for factor 1
-    for (f1.level in f1.levels){
-      
-      # Create a vector with the scores of each level in factor 1
-      current.vector <- my.data[my.data[[my.factor1]] == f1.level , dv]
-      
-      # Clean missind data
-      current.vector.c <- current.vector[!is.na(current.vector)]
-      
-      # Obtain the mean, standard deviations, standard errors, n, and 95% CI
-      mean.level <- mean(current.vector.c)
-      sd.level <- sd(current.vector.c)
-      n.level <- length(current.vector.c)
-      se.level <- sd.level / sqrt(n.level)
-      upper.ci.level <- mean.level + 1.96 * se.level
-      lower.ci.level <- mean.level - 1.96 * se.level
-      
-      # Save the results
-      level.descriptive.results <- data.frame (
-        dep.variable = dv, 
-        factor1 = f1.level,
-        factor2 = paste0 ("all"),
-        mean = mean.level,
-        sd = sd.level,
-        upper.ci = upper.ci.level,
-        lower.ci = lower.ci.level,
-        se = se.level,
-        n = n.level
-      )
-      
-      descriptive.results[[d]] <- level.descriptive.results
-      d <- d + 1
-    
-    } # Close the loop for factor 1
-     
-    # - 2.1.1. Cohen's d for post-hoc comparisons in factor1
-    
-    # Extract the descriptives for factor 1
-    data.groups.to.compare <- do.call(rbind, descriptive.results)
-    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
-                                   data.groups.to.compare$factor2 == "all", ]
-    
-    # Obtain the number of groups (and rows)
-    n.groups <- nrow(data.groups.to.compare)
-    
-    # Obtain a matrix with the combination indexes
-    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
-    
-    # Specify function for Cohen d calculation
-    f.cohen.d.calculation <- function (groups.data, groups.matrix, dv.name, effect.name) {
+  # Specify function for Cohen d calculation
+    f.cohen.d.calculation <- function (groups.data, groups.matrix, dv.name, effect.name, level.names) {
     
       # Create a list to store the results
       fd.results.list <- list()
@@ -927,8 +843,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
         index.g2 <- groups.matrix [i.comparison, 2]
       
         # Obtain the names of groups compared
-        name.g1 <- groups.data [index.g1, "factor1"]
-        name.g2 <- groups.data [index.g2, "factor1"]
+        name.g1 <- groups.data [index.g1, level.names]
+        name.g2 <- groups.data [index.g2, level.names]
       
         # Obtain the means of groups compared
         mean.g1 <- groups.data [index.g1, "mean"]
@@ -969,21 +885,99 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
    
     } # Close the f.cohen.d.calculation function
       
-    # Apply the function to calculate the d results for factor 1
-    factor1.d.results <- f.cohen.d.calculation(
-      groups.data = data.groups.to.compare,
-      groups.matrix = comparison.matrix,
-      dv.name = dv,
-      effect.name = my.factor1
-    )
+ 
+     
+  # Initiate a loop for each dv
+  for (dv in my.dv.list) {
     
-    # Save the d results for the factor 1  groups
-    cohen.d.results[[c]] <- factor1.d.results
-    c <- c + 1
+    
+#--- 1. Metrics for the ANOVA models
+    
+    # Build a dynamic formula
+    anova.formula <- as.formula (paste0(dv, "~", my.factor1, "*", my.factor2))
+
+    # Fit the ANOVA model
+    anova.model <- aov(anova.formula, data = my.data)
+    
+    # Extract the model in a dataframe
+    anova.table <- anova(anova.model)
+    
+    # Bind the anova table with a dataframe that contains the dv names
+    anova.result.df <- data.frame (dep.variable = rep(dv, nrow(anova.table)), 
+                                    effect = rownames(anova.table))
+    anova.result.df <- bind_cols (anova.result.df, anova.table)
+    
+    # Add the eta squared (Proportional Reduction in Error)
+    ss.total <- sum(anova.table[ , "Sum Sq"]) # sum of error
+    anova.result.df$eta.squared <- anova.result.df[["Sum Sq"]] / ss.total
+    
+    # Save the results
+    anova.results [[a]] <- anova.result.df
+    a <- a + 1
+    
+ 
+    
+#--- 2. Posthoc Comparison with Tukey
+    
+    # Obtain the Tukey results
+    tukey <- TukeyHSD(anova.model)
+    
+    # Bind the comparisons for main effects and interaction effects in a single dataframe
+    for (name.effect in names(tukey)) {
+      
+      # Extract the comparisons for the effect
+      tukey.df <- as.data.frame(tukey[[name.effect]])
+      tukey.df$dep.variable <- dv
+      tukey.df$effect <- name.effect
+      tukey.df$comparison <- rownames(tukey.df)
+      tukey.results [[t]] <- tukey.df
+      t <- t + 1
+    } # Close the loop for the Tukey effect       
+    
+    
+    
+#--- 3. Descriptive Statistics
+    
+    # -- 3.1. Descriptives for factor 1
+    
+    # Open a loop for factor 1
+    for (f1.level in f1.levels){
+      
+      # Create a vector with the scores of each level in factor 1
+      current.vector <- my.data[my.data[[my.factor1]] == f1.level , dv]
+      
+      # Clean missind data
+      current.vector.c <- current.vector[!is.na(current.vector)]
+      
+      # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+      mean.level <- mean(current.vector.c)
+      sd.level <- sd(current.vector.c)
+      n.level <- length(current.vector.c)
+      se.level <- sd.level / sqrt(n.level)
+      upper.ci.level <- mean.level + 1.96 * se.level
+      lower.ci.level <- mean.level - 1.96 * se.level
+      
+      # Save the results
+      level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1.levels = f1.level,
+        factor2.levels = paste0 ("all"),
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level, 
+        level.name = f1.level)
+      
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+    
+    } # Close the loop for factor 1
      
     
-    
-    # -- 2.2. Descriptives for factor 2
+    # -- 3.2. Descriptives for factor 2
       
     # Open a loop for factor 2
     for (f2.level in f2.levels){
@@ -1005,14 +999,15 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
       # Save the results
       level.descriptive.results <- data.frame (
         dep.variable = dv, 
-        factor1 = paste0 ("all"),
-        factor2 = f2.level,
+        factor1.levels = paste0 ("all"),
+        factor2.levels = f2.level,
         mean = mean.level,
         sd = sd.level,
         upper.ci = upper.ci.level,
         lower.ci = lower.ci.level,
         se = se.level,
-        n = n.level
+        n = n.level,
+        level.name = f2.level
       )
       
       descriptive.results[[d]] <- level.descriptive.results
@@ -1021,7 +1016,7 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
       } # Close the loop for factor 2
     
     
-    
+    # -- 3.3. Descriptives for the interaction
     
       # Open loops for the interaction
 
@@ -1045,14 +1040,15 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
         # Save the results
         level.descriptive.results <- data.frame (
         dep.variable = dv, 
-        factor1 = f1.level,
-        factor2 = f2.level,
+        factor1.levels = f1.level,
+        factor2.levels = f2.level,
         mean = mean.level,
         sd = sd.level,
         upper.ci = upper.ci.level,
         lower.ci = lower.ci.level,
         se = se.level,
-        n = n.level
+        n = n.level,
+        level.name = paste0(f1.level, ":", f2.level)
       )
       
       descriptive.results[[d]] <- level.descriptive.results
@@ -1062,29 +1058,98 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
       }  # Close the loop of factor 2 in the interaction loop
     
     
+# --- 4. Cohen's d Calculations
     
-#--- 3. Posthoc Comparison with Tukey
+    # -- 4.1. Cohen's d for factor 1 comparisons
     
-    # Obtain the Tukey results
-    tukey <- TukeyHSD(anova.model)
+    # Extract the descriptives for factor 1
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                   data.groups.to.compare$factor2.levels == "all", ]
     
-    # Bind the comparisons for main effects and interaction effects in a single dataframe
-    for (name.effect in names(tukey)) {
-      
-      # Extract the comparisons for the effect
-      tukey.df <- as.data.frame(tukey[[name.effect]])
-      tukey.df$dep.variable <- dv
-      tukey.df$effect <- name.effect
-      tukey.df$comparison <- rownames(tukey.df)
-      tukey.results [[t]] <- tukey.df
-      t <- t + 1
-    } # Close the loop for the Tukey effect
+    # Obtain the number of groups
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the group combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Apply the f.cohen.d.calculation function to calculate the d results for factor 1
+    factor1.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = my.factor1, 
+      level.names = "level.name"
+    )
+    
+    # Save the d results for the factor 1  groups
+    cohen.d.results[[c]] <- factor1.d.results
+    c <- c + 1
+    
+    
+    # -- 4.2. Cohen's d for factor 2 comparisons
+    
+    # Extract the descriptives for factor 2
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                   data.groups.to.compare$factor1.levels == "all", ]
+    
+    # Obtain the number of groups
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the group combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Apply the f.cohen.d.calculation function to calculate the d results for factor 2
+    factor2.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = my.factor2,
+      level.names = "level.name"
+    )    
+    
+    # Save the d results for the factor 2  groups
+    cohen.d.results[[c]] <- factor2.d.results
+    c <- c + 1  
+    
+
+    # -- 4.3. Cohen's d for the interaction comparisons
+    
+    # Extract the descriptives for the interaction
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                  data.groups.to.compare$factor1.levels != "all" &
+                                  data.groups.to.compare$factor2.levels != "all", 
+                                  ]
+    
+    # Obtain the number of groups
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the group combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Apply the f.cohen.d.calculation function to calculate the d results for the interaction
+    interaction.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = paste0(my.factor1, ":", my.factor2),
+      level.names = "level.name"
+    )    
+    
+    # Save the d results for the factor 2  groups
+    cohen.d.results[[c]] <- interaction.d.results
+    c <- c + 1  
+    
+
     
 } # close the dv loop
   
-  ###
-  #--- Save all the results
-  ###
+
+    
+#--- 5. Save all the results
+
   
   #--- ANOVA Results
   
@@ -1107,8 +1172,8 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   descriptives.df[numeric.cols] <- round(descriptives.df[numeric.cols], 2)
   
   # Rename the factor columns
-  names (descriptives.df)[names(descriptives.df) == "factor1"] <- my.factor1
-  names (descriptives.df)[names(descriptives.df) == "factor2"] <- my.factor2
+  names (descriptives.df)[names(descriptives.df) == "factor1.levels"] <- my.factor1
+  names (descriptives.df)[names(descriptives.df) == "factor2.levels"] <- my.factor2
   
   
   #--- Cohen's d Results
@@ -1116,6 +1181,13 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   # Group the d results for all comparisons
   cohen.d.df <- do.call(rbind, cohen.d.results)
   
+  # Add a "comparison" variable" to use as a key for the Tukey results, duplicating all comparisons with the altered order
+  cohen.d.df1 <- cohen.d.df
+  cohen.d.df1$comparison <- paste0 (cohen.d.df1$group1, "-", cohen.d.df1$group2)
+  cohen.d.df2 <- cohen.d.df
+  cohen.d.df2$comparison <- paste0 (cohen.d.df2$group2, "-", cohen.d.df2$group1)
+  cohen.d.df2$d <- cohen.d.df2$d *(-1)
+  doubled.cohen.d.df <- bind_rows(cohen.d.df1, cohen.d.df2)
   
   
   #--- Tukey Results
@@ -1128,6 +1200,11 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
   index.tukey <- tukey.results.df [ , c("dep.variable", "effect", "comparison")]
   tukey.results.df[ , c("dep.variable", "effect", "comparison")] <- NULL
   tukey.results.df <- bind_cols(index.tukey, tukey.results.df)
+  
+  # Add the Cohen's d results
+  tukey.results.df <- merge(tukey.results.df, doubled.cohen.d.df, by = c("dep.variable", "effect", "comparison"), all.x = TRUE)
+  tukey.results.df$group1 <- NULL
+  tukey.results.df$group2 <- NULL
 
   #--- List with all the results
   
@@ -1159,19 +1236,15 @@ pay.results <- f.factorial.anova (
   my.factor2 = "customer"
 )
 
+
 pay.anova.df <- pay.results$anova
 pay.anova.df
 
 pay.descriptives.df <- pay.results$descriptives
 pay.descriptives.df
 
-pay.d.df <- pay.results$cohen.d
-pay.d.df
-
 pay.tukey.df <- pay.results$tukey
 pay.tukey.df
-
-
 
 
 ```
