@@ -63,6 +63,7 @@ library(MASS)        # Simulation of multivariate distributions
 library(car)         # Scatterplot matrices
 library(corrplot)    # Correlation plots
 library(effectsize)  # Effect size calculations
+library(BayesFactor) # For Bayesian inference
 
 ```
 
@@ -629,6 +630,34 @@ Yet, to make sure the results we obtained about the comparison across customers 
 
 # 6. Checks for Balanced Comparisons
 
+
+## 6.1. Exploration of demographic effects on Dependent Variables
+
+To identify any relevant effect on the demographic variables on the outcomes, we evaluate the correlations between these two types of variables, which we can observe in the correlation matrix, in a scatterplot matrix or in a correlation plot. 
+
+To gaing a more holistic picture, we include also other variables like condition and customer in the matrix. 
+
+```{r}
+# Extract a dataframe with the variables to correlate
+cor.df <- pay.df [ , c("age", "gender", "condition", "customer", "social.responsability", "ease", "purchase.intention", "loyalty")]
+cor.df$gender <- as.numeric(ifelse(cor.df$gender == "woman", 0,1))
+cor.df$condition <- as.numeric(ifelse(cor.df$condition == "control", 0,1))
+cor.df$customer <- as.numeric(ifelse(cor.df$customer == "no", 0,1))
+
+
+# Correlation matrix 
+corr.test (cor.df, use = "complete.obs")
+
+# Scatterplot matrix
+scatterplotMatrix (cor.df, use = "complete.obs")
+
+# Correlation plot
+corrplot.mixed(corr = cor(cor.df, use = "complete.obs"), upper = "ellipse")
+```
+
+Correlation analysis revealed that age was significantly associated with ease of use, purchase intention, and loyalty. In contrast, gender showed very weak correlations with any outcome variables (all p > .05). Let's further explore if age and gender are different across the experimental assignment condition and across type of customers, to see if their effects can contaminate the results. 
+
+
 ## 6.1. Balance in Experimental Assignment
 
 We assessed whether the control and experimental groups differed on age, gender, or customer status using descriptive statistics, visualizations, and statistical tests (chi-square tests for categorical variables, independent t-tests for age).
@@ -717,43 +746,20 @@ par(mar = c(5.1, 4.1, 4.1, 2.1))
 
 The factorial ANOVA revealed no significant interaction between condition and customer status for age (F(1, 796) = X.XX, p = .XXX), and the chi-square test showed no significant association between the combined condition-customer groups and gender distribution (χ²(3) = X.XX, p = .XXX). This indicates successful balance across all four experimental cells, supporting the internal validity of subsequent comparisons
 
-Yet, the comparisons can become more rigorous if we also account for potential effects of the demographic variables in our outcomes, as we can always expect some level of unbalance between conditions even if differences were not significant. 
+Attending to the scarce differences in age and gender across our experimental variables, we proceed with the following analyses without considering them as covariates.
 
 
-## 6.2. Control of Demographics Effects
-
-To identify any relevant effect on the demographic variables on the outcomes, we evaluate the correlations between these two types of variables, which we can observe in the correlation matrix, in a scatterplot matrix or in a correlation plot. 
-
-```{r}
-# Extract a dataframe with the variables to correlate
-cor.df <- pay.df [ , c("age", "gender", "condition", "customer", "social.responsability", "ease", "purchase.intention", "loyalty")]
-cor.df$gender <- as.numeric(ifelse(cor.df$gender == "woman", 0,1))
-cor.df$condition <- as.numeric(ifelse(cor.df$condition == "control", 0,1))
-cor.df$customer <- as.numeric(ifelse(cor.df$customer == "no", 0,1))
-
-
-# Correlation matrix 
-corr.test (cor.df, use = "complete.obs")
-
-# Scatterplot matrix
-scatterplotMatrix (cor.df, use = "complete.obs")
-
-# Correlation plot
-corrplot.mixed(corr = cor(cor.df, use = "complete.obs"), upper = "ellipse")
-```
-
-Correlation analysis revealed that age was significantly associated with ease of use, purchase intention, and loyalty. In contrast, gender showed no significant correlations with any outcome variables (all p > .05). Based on these findings, age will be included as a covariate in sensitivity analyses involving the affected outcome variables.
 
 
 # 7. Experimental Effects Analysis
 
-To evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only, we used several 2×2 factorial Analysis of Variance (ANOVA). This design allowed us to test both the main effect of the experimental condition and its potential interaction with participants' customer status (current customers vs. non-customers of the retailer). Additionally, we were able to use sensitivity analyses with ANCOVA models that controlled for potential confounding effects of age as covariate.
+To evaluate the causal impact of exposing participants to ControvPay versus traditional payment methods only, we used several 2×2 factorial Analysis of Variance (ANOVA). This design allowed us to test both the main effect of the experimental condition and its potential interaction with participants' customer status (current customers vs. non-customers of the retailer). 
 
 Specifically, the analysis addresses three key questions:
 
 * 1. Does the presence of ControvPay influence consumer perceptions and intentions?
 * 2. Do these effects differ between existing customers and non-customers?
-* 3. How robust are the results when controlling for the effect of age?
+
 
 We started by checking the normality assumption for conducting ANOVA testS. 
 
@@ -1251,17 +1257,270 @@ pay.tukey.df
 
 
 
-pruebas
+Usage con dicotomous variable for the interaction
 
 ```{r}
-# Para 3 grupos
-grupos <- 1:3
-combinations.matrix <- as.data.frame(t(combn(1:nrow(pay.anova.df), 2)))
-combinaciones
+
+# Create the dicotomous variable for the interaction
+pay.df$exp.customer <- NA_real_
+pay.df$exp.customer [pay.df$condition == "experimental" & pay.df$customer == "yes"] <- 1
+pay.df$exp.customer [!(pay.df$condition == "experimental" & pay.df$customer == "yes")] <- 0
+  
+
+
+# Calculate the ANOVA results with the dicotomous interaction variable
+
+model.dic.interaction <- aov ( social.responsability ~ condition + customer + exp.customer, data = pay.df)
+summary(model.dic.interaction)
+
+```
 
 
 
 
+
+
+
+## Bayesian Models
+
+```{r}
+
+# Comparing the models and the interaction
+
+bf.medium.prior <- anovaBF(social.responsability ~ condition * customer, 
+                          data = pay.df, 
+                          whichModels = 'all',
+                          rscaleFixed = 0.35) 
+
+summary(bf.medium.prior)
+
+
+# Social Responsability
+m.bayes.social.responsability1 <- lmBF(social.responsability ~ condition + customer, data = pay.df)
+summary(m.bayes.social.responsability1)
+
+m.bayes.social.responsability2 <- lmBF(social.responsability ~ condition * customer, data = pay.df)
+summary(m.bayes.social.responsability2)
+
+# Model comparison
+m.bayes.social.responsability1 / m.bayes.social.responsability2
+
+
+```
+
+
+While the results indicate that there is more evidence for the absence of an interaction, this evidence is very weak. We would analyze it further establishing a small prior: 
+
+
+```{r}
+bf.small.prior <- anovaBF(social.responsability ~ condition * customer, 
+                          data = pay.df,
+                          whichModels = 'all',
+                          rscaleFixed = 0.10) 
+
+summary(bf.small.prior)
+
+
+
+# Social Responsability
+m.small.social.responsability <- lmBF(social.responsability ~ condition + customer, data = pay.df, 
+                          rscaleFixed = 0.10)
+summary(m.small.social.responsability)
+
+m.small.social.responsability.int <- lmBF(social.responsability ~ condition * customer, data = pay.df, 
+                          rscaleFixed = 0.10)
+summary(m.small.social.responsability.int)
+
+# Model comparison
+m.small.social.responsability / m.small.social.responsability.int
+
+```
+
+```{r}
+
+bf.very.small.prior <- anovaBF(social.responsability ~ condition * customer, 
+                          data = pay.df, 
+                           whichModels = 'all',
+                          rscaleFixed = 0.10) 
+
+summary(bf.very.small.prior)
+
+
+
+# Social Responsability
+m.v.small.social.responsability <- lmBF(social.responsability ~ condition + customer, data = pay.df, 
+                          rscaleFixed = 0.10)
+summary(m.v.small.social.responsability)
+
+m.v.small.social.responsability.int <- lmBF(social.responsability ~ condition * customer, data = pay.df, 
+                          rscaleFixed = 0.10)
+summary(m.v.small.social.responsability.int)
+
+# Model comparison
+m.v.small.social.responsability / m.v.small.social.responsability
+
+
+```
+
+```{r}
+bf.very.small.prior <- anovaBF(social.responsability ~ condition * customer, 
+                          data = pay.df, 
+                           whichModels = 'all',
+                          rscaleFixed = 0.10) 
+
+summary(bf.very.small.prior)
+
+
+
+# Social Responsability
+m.v.small.social.responsability <- lmBF(social.responsability ~ condition + customer, data = pay.df, 
+                          rscaleFixed = 0.10)
+summary(m.v.small.social.responsability)
+
+m.v.small.social.responsability.int <- lmBF(social.responsability ~ condition * customer, data = pay.df, 
+                          rscaleFixed = 0.10)
+summary(m.v.small.social.responsability.int)
+
+# Model comparison
+m.v.small.social.responsability / m.v.small.social.responsability.int
+
+```
+
+
+
+
+
+
+We continue exploring the interaction to identify differences in marginal groups:
+
+```{r}
+chain.bayes.social.responsability <- posterior(bf.very.small.prior, 
+                                               index = 7, 
+                                               iterations = 5000)
+
+# plot the chain object, 
+plot(chain.bayes.social.responsability [ , 1:10])
+
+summary(chain.bayes.social.responsability )
+
+
+```
+
+We can obtain the estimates in terms of the means
+
+
+```{r}
+# Calculate the distributions for the main effects
+d.main.effects <- data.frame(chain.bayes.social.responsability[ , 2:5] + chain.bayes.social.responsability[ , 1])
+
+# Calculate the distributions for the interaction effects
+d.control.yes <- chain.bayes.social.responsability[ , "mu"] + 
+            chain.bayes.social.responsability[ , "condition-control"] +
+            chain.bayes.social.responsability[ , "customer-yes"] + 
+            chain.bayes.social.responsability[ , "condition:customer-control.&.yes"]
+
+d.control.no <- chain.bayes.social.responsability[ , "mu"] + 
+            chain.bayes.social.responsability[ , "condition-control"] +
+            chain.bayes.social.responsability[ , "customer-no"] + 
+            chain.bayes.social.responsability[ , "condition:customer-control.&.no"]
+
+d.experimental.yes <- chain.bayes.social.responsability[ , "mu"] + 
+            chain.bayes.social.responsability[ , "condition-experimental"] +
+            chain.bayes.social.responsability[ , "customer-yes"] + 
+            chain.bayes.social.responsability[ , "condition:customer-experimental.&.yes"]
+
+d.experimental.no <- chain.bayes.social.responsability[ , "mu"] + 
+            chain.bayes.social.responsability[ , "condition-experimental"] +
+            chain.bayes.social.responsability[ , "customer-no"] + 
+            chain.bayes.social.responsability[ , "condition:customer-experimental.&.no"]
+
+# Group the results
+estimations <- bind_cols(as.data.frame(d.main.effects), 
+                         control.yes = d.control.yes, 
+                         control.no = d.control.no, 
+                         experimental.yes = d.experimental.yes, 
+                         experimental.no = d.experimental.no)
+
+
+# Calculate 95% credible intervals
+quantiles.social.r <- t(apply(estimations, 2, quantile, pr = c(0.025, 0.5, 0.975)))
+quantiles.social.r
+
+
+
+```
+
+
+
+
+Graph the results
+
+
+```{r}
+# Crear dataframe en un solo paso
+df_resultados <- data.frame(
+  grupo = rownames(quantiles.social.r),
+  media = quantiles.social.r[, "50%"],
+  inferior = quantiles.social.r[, "2.5%"],
+  superior = quantiles.social.r[, "97.5%"]
+)
+
+print(df_resultados)
+
+
+library(ggplot2)
+ggplot(df_resultados, aes(x = grupo, y = media)) +
+  geom_pointrange(aes(ymin = inferior, ymax = superior), size = 1) +
+  labs(title = "Social Responsibility por grupo",
+       subtitle = "Con intervalos de credibilidad 95%",
+       y = "Social Responsibility", x = "Grupo") +
+  theme_bw() +
+  coord_flip()
+```
+
+
+
+
+Post-hoc de las celdas más extremas
+
+```{r}
+# Calculamos la distribución de la diferencia entre las dos celdas más extremas:
+# Efecto Simple: Control/Yes - Experimental/Yes (diferencia positiva esperada)
+d.diferencia.CYes_EYes <- d.control.yes - d.experimental.yes
+
+# Calculamos la Mediana y el IC 95% para esta diferencia
+quantiles.diferencia <- quantile(d.diferencia.CYes_EYes, pr = c(0.025, 0.5, 0.975))
+
+# Esto te dice si el efecto simple es creíble.
+quantiles.diferencia
+
+```
+
+
+
+
+```{r}
+aggregate(social.responsability ~ condition + customer, data = pay.df, mean)
+```
+
+
+
+
+
+
+```{r}
+ggplot(pay.df, aes(x = condition, y = social.responsability, color = customer)) +
+  geom_boxplot() +
+  geom_point(position = position_jitterdodge(), alpha = 0.3) +
+  stat_summary(fun = mean, geom = "point", size = 3, 
+               position = position_dodge(width = 0.75)) +
+  labs(title = "Datos reales - Social Responsibility por condición y customer")
+```
+
+
+
+```{r}
+write.csv(pay.df, "pay.df.csv")
 ```
 
 
