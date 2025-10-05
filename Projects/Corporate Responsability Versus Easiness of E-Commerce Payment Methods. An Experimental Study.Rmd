@@ -102,7 +102,7 @@ summary(pay.df)
 ```
 
 
-## 3.3. Customers' Information
+## 3.3. Participants' Information
 
 Beyond the basic demographic information, we also simulated a variable that represents the frequency of purchasing in the retailer during the last year. This question was asked together with other questions about purchasing frequency in other retailers to maintain anonymity and add context to the survey. 
 
@@ -234,7 +234,7 @@ csr.scores <- f.sim.likert(n = data.n,
                            corr = 0.6)
 
 # Apply higher scores for the customers group assigned to the experimental group
-effect.size <- 0.3 
+effect.size <- 0.35 
 csr.scores [pay.df$condition == "experimental" & pay.df$customer == "yes"] <- 
   csr.scores [pay.df$condition == "experimental" & pay.df$customer == "yes"] - 
   effect.size
@@ -475,7 +475,7 @@ We simulate the responses to the purchase intention items as moderately related 
 cl.scores <- f.sim.likert(n = data.n, 
                            n.items = 2,
                            mean = 4.2, 
-                           sd = 1.5,
+                           sd = 1.4,
                            rounding = FALSE,
                            scale.max = 7,
                            scale.min = 1, 
@@ -487,7 +487,7 @@ cl.scores <- f.sim.likert(n = data.n,
 # In section 3.4.3 we already defined the vectors with the means for ease of use (eou_mean) and social responsability (csr_mean)
 
 # Define the effect sizes for perceptions of easiness and social responsability
-csr.effect.size <- 0.6
+csr.effect.size <- 0.7
 eou.effect.size <- 0.6
 
 # Apply the effects to each item
@@ -1256,24 +1256,79 @@ pay.tukey.df
 ```
 
 
+Although we do not find any significant difference at the level p < 0.5, the interaction between the experimental condition and being customer was significant for the social responsability perception, with those who were customers of the retailer having a lower perception of responsability when exposed to the ControvPay option than those not exposed to it (d = -.27, Tukey p = .04). 
 
-Usage con dicotomous variable for the interaction
+For other dependent variables, all differences were far from being statistically significant, but at the descriptive level we can find that the results of loyalty follow a similar pattern than the one found for social responsability, in which the retailers customers have lower loyalty when exposed to the ControvPay option than those not exposed to it (d = -0.12, Tukey p = .594). 
+
+We can better see these interaction effects in bar graphs: 
+
 
 ```{r}
 
-# Create the dicotomous variable for the interaction
-pay.df$exp.customer <- NA_real_
-pay.df$exp.customer [pay.df$condition == "experimental" & pay.df$customer == "yes"] <- 1
-pay.df$exp.customer [!(pay.df$condition == "experimental" & pay.df$customer == "yes")] <- 0
+# Select the descriptives of the interaction to graph
+pay.descriptives.int.df <- pay.descriptives.df [!(pay.descriptives.df$condition == "all") & !(pay.descriptives.df$customer =="all"), ]
+
+
+# Titles for each faceted graph representing a type of complaint
+custom_titles <- c(
+  social.responsability   = "Soc. Responsability Perception",
+  ease     = "Ease Perception",
+  purchase.intention = "Purchase Intention",
+  loyalty   = "Loyalty"
+)
+
+# Plotting the bar graph
+ggplot(pay.descriptives.int.df, aes(x = condition, y = mean, fill = customer)) + # specify variables
   
-
-
-# Calculate the ANOVA results with the dicotomous interaction variable
-
-model.dic.interaction <- aov ( social.responsability ~ condition + customer + exp.customer, data = pay.df)
-summary(model.dic.interaction)
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +  # specify bar graph
+  
+  geom_errorbar(
+    aes(ymin = lower.ci, ymax = upper.ci),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) + # error bars
+  
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", #
+             labeller = labeller(dep.variable = custom_titles)) + # specify facets for each dv
+  labs(
+    y = "Mean Scores",
+    x = "Experimental Condition",
+    fill = "Customer",
+    title = "Differences Across Experimental Conditions"
+  ) + # labels
+  
+  scale_x_discrete(labels = c ("No ControvPay", "ControvPay")) + # x labels
+  
+  geom_text(
+    aes(y = upper.ci, label = paste0(round(mean, 2))), # use upper ci as reference position
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -0.5,                             # slightly above the bar
+    size = 2.5                                # text size
+  ) + # data labels
+  
+  coord_cartesian(ylim = c(3, 6.2)) +  # limits of the graph
+  
+  theme_minimal(base_size = 12) +
+  
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "right",
+    legend.justification = c("right", "bottom"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text  = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
+    plot.margin = margin(10, 5, 10, 5)
+  ) # Margins and position of elements
 
 ```
+
+
+In the graph we can see that the difference in social responsability perception and loyalty for customers who experienced ControvPay are very small, just mildly lower than other participants. Yet, it is important to further evaluate the significance of these differences because they refer to possibilities of losing customers in case the company introduced the new payment method. We proceeded with Bayesian analyses to further evaluate this significance, and as a sensitivity complementation to our ANOVA analyses.  
 
 
 
