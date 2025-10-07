@@ -65,6 +65,9 @@ library(corrplot)    # Correlation plots
 library(effectsize)  # Effect size calculations
 library(BayesFactor) # For Bayesian inference
 
+# PACKAGE USED FOR MEDIATION ANALYSES
+# For mediation analyses we used the application Process for R, freely available with instructions at: https://www.processmacro.org/index.html 
+
 ```
 
 
@@ -1554,17 +1557,110 @@ ci.dif.in.customers
 
 ```
 
-The difference is significant
+The results confirm that the perception of social responsibility is significantly lower for the retailer's customers who were exposed to the ControvPay option compared to those not exposed to it [median difference = 0.21 points, 95% CI: 0.03, 0.41].
+
+The emergence of this difference specifically among existing customers aligns with theoretical expectations, as the retailer is known for high ethical standards, and its customers are likely more sensitive to ethical controversies in payment methods.
+
+To further explore the downstream consequences of this difference on impactful outcomes like customer loyalty and purchase intention, we conduct mediation analyses within the customer subgroup.
 
 
+# Path Analyses
 
+Although prior analyses indicated no significant direct differences in loyalty and purchase intention between experimental conditions, it is possible that these effects were small and masked by statistical noise. This suspicion is supported by the difference we found in social responsibility perception among the retailer's customers, combined with our knowledge that loyalty and purchase intention are related to social responsibility perceptions (see correlation analyses in Section X).
 
+A mediation analysis examining the experimental effect through social responsibility perceptions can help identify these potential indirect pathways.
 
+## Checking the Fit of Path Analyses Models
 
+We know collinearity between experimental conditions and social responsibility perception is not problematic for predicting other variables, as they are only slightly related (d < .30) (see Section X).
+
+To identify potential issues with outliers, normality, linearity, homoscedasticity, and independence of residuals, we will:
+
+* Specify the linear regression models implied in the path analysis.
+* Plot the distribution of residuals and identify outliers' influence on model estimates
 
 ```{r}
-aggregate(social.responsability ~ condition + customer, data = pay.df, mean)
+
+# Select subsample of retailer's customers
+customers.pay.df <- pay.df[pay.df$customer == "yes", ]
+
+# Model the two steps of path analysis for both DVs with multiple regression
+m.path.1 <- lm(social.responsability ~ condition, data = customers.pay.df)
+m.path.2.loyalty <- lm(loyalty ~ condition + social.responsability, data = customers.pay.df)
+m.path.2.purchase.intention <- lm(purchase.intention ~ condition + social.responsability, data = customers.pay.df)
+
+# Obtain diagnostic plots
+
+plot(m.path.1)
+plot(m.path.2.loyalty) 
+plot(m.path.2.purchase.intention)
+
 ```
+
+In the residual vs. fitted values plots, we observe a homogeneous pattern across fitted values, suggesting linear relationships and absence of heteroscedasticity issues.
+
+The normal Q-Q plots indicate that standardized residuals closely follow the theoretical normal distribution, suggesting no major normality violations.
+
+The residual vs. leverage plots identify some potentially influential outliers based on high standardized residuals and leverage (cases 606, 786, 179, 294, 310, 23, 557, and 134). We will inspect these cases to identify potential data quality issues.
+
+```{r}
+
+customers.pay.df[customers.pay.df$id %in% c(606, 786, 179, 294, 310, 23, 557, 134), ]
+
+```
+
+
+We did not observe major data problems. Although we observed some extreme scores in either purchase intention or loyalty, these scores tended to be in line with other important variables like the perception of ease. 
+
+We therefore maintain the analyses with all cases to avoid artificial data manipulations.
+
+
+
+## Path Modeling for Loyalty
+
+To analyze the mediation effect of the experimental condition on loyalty through the perception of social responsibility, we use the R extension PROCESS (https://www.processmacro.org/index.html).
+
+```{r}
+
+# Convert condition to numeric for PROCESS
+customers.pay.df$condition_num <- ifelse(customers.pay.df$condition == "experimental", 1, 0)
+
+# Run mediation analysis
+process(data = customers.pay.df, 
+        y = "loyalty", 
+        x = "condition_num", 
+        m = "social.responsability", 
+        model = 4, 
+        boot = 5000,
+        seed = 123)
+
+```
+
+The path analysis confirms that social responsibility perceptions significantly mediate the relationship between ControvPay exposure and customer loyalty, accounting for a reduction of 0.15 points in the loyalty scale [95% CI: -0.27, -0.04]. We will proceed with further analysis of this mediation effect's practical implications in Section X.
+
+
+## Path Modeling Purchase Intention
+
+To analyze the mediation effect of the experimental condition on purchase intention through the perception of social responsibility, we also use the R extension PROCESS (https://www.processmacro.org/index.html).
+
+```{r}
+
+# Run mediation analysis
+process(data = customers.pay.df, 
+        y = "purchase.intention", 
+        x = "condition_num", 
+        m = "social.responsability", 
+        model = 4, 
+        boot = 5000,
+        seed = 123)
+
+```
+
+
+The path analysis indicates that social responsibility perceptions do not significantly mediate the relationship between ControvPay exposure and purchase intention. The indirect effect is negligible (effect = -0.02) and the 95% confidence interval includes zero [-0.07, 0.01], indicating statistical non-significance.
+
+This suggests that while social responsibility perceptions affect loyalty, they do not translate into significant changes in immediate purchase intentions among existing customers.
+
 
 
 
