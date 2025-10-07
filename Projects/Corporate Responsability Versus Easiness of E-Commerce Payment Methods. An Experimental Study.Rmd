@@ -811,10 +811,8 @@ The distributions of purchase intentions and loyalty approximate closely to thei
 
 ## 7.2. Factorial Anova Models
 
-To perform the 2 (condition: experimental versus control) x 2 (retailer customer: customer versus non customer) factorial ANOVA, across our four dependent variables, we used a reusable function from my Tookit, expecified below. 
+To perform the comparison across conditionos, we used a 2 (condition: experimental versus control) x 2 (retailer customer: customer versus non customer) factorial ANOVA for each of our dependent variables. For that, we used a reusable function from my Tookit, expecified below. 
 
-  descriptives <- list()
-  tukey.results <- list ()
 
 ```{r}
 
@@ -1228,7 +1226,7 @@ f.factorial.anova <- function (my.data, my.dv.list, my.factor1, my.factor2) {
 ```
 
 
-Usage
+Now we can apply the function to our data. 
 
 
 ```{r}
@@ -1332,139 +1330,133 @@ In the graph we can see that the difference in social responsability perception 
 
 
 
+## Bayesian Sensitivity Analysis
 
+To conduct Bayesian Anova for the perception of social responsability and loyalty, we use a function from my Toolkit.
 
-
-
-## Bayesian Models
+To be able to have sensitivity in the evaluation of small effects, we use r = 0.1 as one of our priors. 
 
 ```{r}
 
-# Comparing the models and the interaction
-
-bf.medium.prior <- anovaBF(social.responsability ~ condition * customer, 
-                          data = pay.df, 
-                          whichModels = 'all',
-                          rscaleFixed = 0.35) 
-
-summary(bf.medium.prior)
-
-
-# Social Responsability
-m.bayes.social.responsability1 <- lmBF(social.responsability ~ condition + customer, data = pay.df)
-summary(m.bayes.social.responsability1)
-
-m.bayes.social.responsability2 <- lmBF(social.responsability ~ condition * customer, data = pay.df)
-summary(m.bayes.social.responsability2)
-
-# Model comparison
-m.bayes.social.responsability1 / m.bayes.social.responsability2
-
+f.bayes.anova <- function (my.data, my.dv.list, my.factor.list, my.priors){
+  
+  # Empty list to store the results
+  bayes.results <- list()  
+  
+  # Empty list to store a summary of the results
+  summary.bayes.results <- list()
+  p <- 1
+  
+  # Create a formula for the factors
+  factor.formula = paste0 ("~ ")
+    for (i.factor in seq_along(my.factor.list)){
+      if (i.factor != length(my.factor.list)) {
+           factor.formula <-  paste0 (factor.formula, my.factor.list[i.factor], " * ")      
+      } # Close if formula
+           else {
+             factor.formula <-  paste0 (factor.formula, my.factor.list[i.factor])
+           }
+  } # Close the loop for the factors
+  
+  
+  # Loop for each dependent variable
+  for (dv in my.dv.list) {
+    
+    for(prior in my.priors) {
+      
+      bayes.model <- anovaBF(as.formula(paste(dv, factor.formula)),
+                      data = my.data,
+                      rscaleFixed = prior,  
+                      whichModels = 'all'
+      )
+      
+      # Dynamic name for the model
+      model.name <- paste0  (dv, ".prior.", prior)
+      
+      # Save the results for each model
+      bayes.results[[model.name]] <- bayes.model
+      
+      # Create a dataframe for the results summary
+      model.df <- as.data.frame (bayes.model)
+      model.df$dep.variable <- paste0 (dv)
+      model.df$prior <- paste0 (prior)
+      model.df$effect <- row.names(model.df)
+      model.df$BF010 <- model.df[[1]]
+      model.df$error <- model.df[[2]]
+      model.df <- model.df [ , c("dep.variable", "prior", "effect", "BF010", "error")]
+      
+      # Save the results summary dataframe in the list
+      summary.bayes.results [[p]] <- model.df
+      p <- p  + 1 
+      
+    } # Close the loop for the priors
+    
+  } # Close the loop for the DVs
+  
+  # Unify the summary results for all dvs and priors
+  summary.df <- do.call(rbind, summary.bayes.results)
+  row.names(summary.df) <- NULL
+  bayes.results[["summary"]] <- summary.df
+  
+  
+  return(bayes.results)
+  
+}
 
 ```
 
-
-While the results indicate that there is more evidence for the absence of an interaction, this evidence is very weak. We would analyze it further establishing a small prior: 
+Application of the formula
 
 
 ```{r}
-bf.small.prior <- anovaBF(social.responsability ~ condition * customer, 
-                          data = pay.df,
-                          whichModels = 'all',
-                          rscaleFixed = 0.10) 
 
-summary(bf.small.prior)
+# Specify the priors
+priors <- c(0.1, 0.5, 1)  # Vector con los dos tipos de "priors" que vamos a probar
 
 
+# Specifiy the DV list
+dvs <- c("social.responsability", "loyalty")
 
-# Social Responsability
-m.small.social.responsability <- lmBF(social.responsability ~ condition + customer, data = pay.df, 
-                          rscaleFixed = 0.10)
-summary(m.small.social.responsability)
+# Specify the factors
+factors <- c("condition", "customer")
 
-m.small.social.responsability.int <- lmBF(social.responsability ~ condition * customer, data = pay.df, 
-                          rscaleFixed = 0.10)
-summary(m.small.social.responsability.int)
+# Apply the function
+bayes.anova.results <- f.bayes.anova (my.data = pay.df, my.dv.list = dvs, my.factor.list = factors, my.priors = priors)
 
-# Model comparison
-m.small.social.responsability / m.small.social.responsability.int
+
+# Print the summary of the results
+summary.bayes <- bayes.anova.results [["summary"]]
+summary.bayes
 
 ```
 
-```{r}
+For **loyalty**, the evidence consistently supported the absence of an interaction effect across all priors. While this conclusion is currently only supported by anecdotal to moderate evidence, it suggests that ControvPay is unlikely to substantially impact customer loyalty. 
 
-bf.very.small.prior <- anovaBF(social.responsability ~ condition * customer, 
-                          data = pay.df, 
-                           whichModels = 'all',
-                          rscaleFixed = 0.10) 
+For **social responsibility**, the results present ambiguous evidence regarding an interaction effect. With more conservative priors (rscale = 0.5 or 1.0), the evidence favored the null hypothesis of no differential effect between experimental conditions across customer profiles. However, these priors are less sensitive to detecting small effects. Conversely, when using a more sensitive prior (rscale = 0.1), we found anecdotal evidence for an interaction effect, though such sensitive priors also increase the risk of detecting statistical noise.
 
-summary(bf.very.small.prior)
-
-
-
-# Social Responsability
-m.v.small.social.responsability <- lmBF(social.responsability ~ condition + customer, data = pay.df, 
-                          rscaleFixed = 0.10)
-summary(m.v.small.social.responsability)
-
-m.v.small.social.responsability.int <- lmBF(social.responsability ~ condition * customer, data = pay.df, 
-                          rscaleFixed = 0.10)
-summary(m.v.small.social.responsability.int)
-
-# Model comparison
-m.v.small.social.responsability / m.v.small.social.responsability
-
-
-```
+Given that even small decreases in social responsibility perceptions could be impactful for our large-scale retailer, we proceeded to quantify this potential effect using Monte Carlo simulation chains to estimate the practical significance of this ambiguous finding.
 
 ```{r}
-bf.very.small.prior <- anovaBF(social.responsability ~ condition * customer, 
-                          data = pay.df, 
-                           whichModels = 'all',
-                          rscaleFixed = 0.10) 
 
-summary(bf.very.small.prior)
+# Extract the model for social responsability
+m.soc.resp.0.1 <- bayes.anova.results[["social.responsability.prior.0.1"]]
 
-
-
-# Social Responsability
-m.v.small.social.responsability <- lmBF(social.responsability ~ condition + customer, data = pay.df, 
-                          rscaleFixed = 0.10)
-summary(m.v.small.social.responsability)
-
-m.v.small.social.responsability.int <- lmBF(social.responsability ~ condition * customer, data = pay.df, 
-                          rscaleFixed = 0.10)
-summary(m.v.small.social.responsability.int)
-
-# Model comparison
-m.v.small.social.responsability / m.v.small.social.responsability.int
-
-```
-
-
-
-
-
-
-We continue exploring the interaction to identify differences in marginal groups:
-
-```{r}
-chain.bayes.social.responsability <- posterior(bf.very.small.prior, 
+# Simulate the Monte Carlo chains
+chain.bayes.social.responsability <- posterior(m.soc.resp.0.1, 
                                                index = 7, 
-                                               iterations = 5000)
+                                               iterations = 10000)
 
-# plot the chain object, 
-plot(chain.bayes.social.responsability [ , 1:10])
+# Convergence diagnostics of Monte Carlo chains
+plot(chain.bayes.social.responsability [, 1:10])
 
-summary(chain.bayes.social.responsability )
-
-
-```
-
-We can obtain the estimates in terms of the means
+# Inspect the Monte Carlo chains
+summary(chain.bayes.social.responsability)
 
 
-```{r}
+###
+# Obtain mean estimations and 95% credible intervals
+###
+
 # Calculate the distributions for the main effects
 d.main.effects <- data.frame(chain.bayes.social.responsability[ , 2:5] + chain.bayes.social.responsability[ , 1])
 
@@ -1491,65 +1483,81 @@ d.experimental.no <- chain.bayes.social.responsability[ , "mu"] +
 
 # Group the results
 estimations <- bind_cols(as.data.frame(d.main.effects), 
-                         control.yes = d.control.yes, 
-                         control.no = d.control.no, 
-                         experimental.yes = d.experimental.yes, 
-                         experimental.no = d.experimental.no)
+                         condition.control_customer.yes = d.control.yes, 
+                         condition.control_customer.no = d.control.no, 
+                         condition.experimental_customer.yes = d.experimental.yes, 
+                         condition.experimental.customer.no = d.experimental.no)
 
 
 # Calculate 95% credible intervals
-quantiles.social.r <- t(apply(estimations, 2, quantile, pr = c(0.025, 0.5, 0.975)))
-quantiles.social.r
+credible.intervals.soc.resp <- t(apply(estimations, 2, quantile, pr = c(0.025, 0.5, 0.975)))
 
-
-
-```
-
-
-
-
-Graph the results
-
-
-```{r}
-# Crear dataframe en un solo paso
-df_resultados <- data.frame(
-  grupo = rownames(quantiles.social.r),
-  media = quantiles.social.r[, "50%"],
-  inferior = quantiles.social.r[, "2.5%"],
-  superior = quantiles.social.r[, "97.5%"]
+# Save the credible intervals in a dataframe
+credible.intervals.soc.resp.df <- data.frame(
+  group = rownames(credible.intervals.soc.resp),
+  median = credible.intervals.soc.resp[, "50%"],
+  lower.ci = credible.intervals.soc.resp[, "2.5%"],
+  upper.ci = credible.intervals.soc.resp[, "97.5%"]
 )
 
-print(df_resultados)
+
+row.names (credible.intervals.soc.resp.df) <- NULL
+
+credible.intervals.soc.resp.df
 
 
-library(ggplot2)
-ggplot(df_resultados, aes(x = grupo, y = media)) +
-  geom_pointrange(aes(ymin = inferior, ymax = superior), size = 1) +
-  labs(title = "Social Responsibility por grupo",
-       subtitle = "Con intervalos de credibilidad 95%",
-       y = "Social Responsibility", x = "Grupo") +
-  theme_bw() +
-  coord_flip()
 ```
 
+The convergence diagnostics indicate that the model estimations were stable and converged appropriately (homogeneous patterns in the trace plots and normal distributions of the simulation results). The estimated means and credible intervals are coherent with the descriptive data. For better interpretation, we visualize them below.
 
 
-
-Post-hoc de las celdas más extremas
 
 ```{r}
-# Calculamos la distribución de la diferencia entre las dos celdas más extremas:
-# Efecto Simple: Control/Yes - Experimental/Yes (diferencia positiva esperada)
-d.diferencia.CYes_EYes <- d.control.yes - d.experimental.yes
+# Gráfico más informativo
+ggplot(credible.intervals.soc.resp.df, aes(x = group, y = median)) +
+  geom_pointrange(aes(ymin = lower.ci, ymax = upper.ci), 
+                  size = 0.7, color = "darkblue") +
+  geom_point(size = 2, color = "white") +
+  labs(title = "Posterior Distributions - Social Responsibility Perception",
+       subtitle = "Points show median estimates, bars show 95% credible intervals",
+       y = "Social Responsibility Score (1-7 scale)", 
+       x = "Experimental Group") +
+  theme_bw() +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"),
+        plot.subtitle = element_text(color = "gray40"))
+```
 
-# Calculamos la Mediana y el IC 95% para esta diferencia
-quantiles.diferencia <- quantile(d.diferencia.CYes_EYes, pr = c(0.025, 0.5, 0.975))
+The posterior distributions reveal a clear interaction pattern: ControvPay differentially affects existing customers versus non-customers:
 
-# Esto te dice si el efecto simple es creíble.
-quantiles.diferencia
+- Existing customers: Decrease of 0.21 points [95% CI: 0.14, 0.29] in social responsibility perception
+
+- Non-customers: Negligible change (0.01 points difference)
+
+Business Implications:
+
+The potential negative impact is concentrated among the retailer's existing customer base, suggesting that brand loyalty may create higher expectations for ethical business practices. While the effect size is small, it could be meaningful given the large customer base.
+
+This pattern aligns with the ambiguous but suggestive evidence from the Bayesian ANOVA, providing concrete estimates of the potential effect magnitude.
+
+To further investigate this difference, we specifically evaluate the contrast between experimental conditions within the customer group using Bayesian post-hoc comparisons.
+
+
+```{r}
+
+# Calculate the estimated distribution of differences between experimental conditions within customers
+dif.in.customers <- d.control.yes - d.experimental.yes
+
+# Calculaate mean and credible intervals for the difference
+ci.dif.in.customers <- quantile(dif.in.customers, pr = c(0.025, 0.5, 0.975))
+ci.dif.in.customers
 
 ```
+
+The difference is significant
+
+
+
 
 
 
@@ -1559,18 +1567,6 @@ aggregate(social.responsability ~ condition + customer, data = pay.df, mean)
 ```
 
 
-
-
-
-
-```{r}
-ggplot(pay.df, aes(x = condition, y = social.responsability, color = customer)) +
-  geom_boxplot() +
-  geom_point(position = position_jitterdodge(), alpha = 0.3) +
-  stat_summary(fun = mean, geom = "point", size = 3, 
-               position = position_dodge(width = 0.75)) +
-  labs(title = "Datos reales - Social Responsibility por condición y customer")
-```
 
 
 
