@@ -1,5 +1,5 @@
 ---
-title: "Corporate Responsability Versus Easiness of E-Commerce Payments Methods: An Experimental Study"
+title: "Corporate responsibility Versus Easiness of E-Commerce Payments Methods: An Experimental Study"
 output:
   html_notebook:
     css: my_style.css
@@ -204,7 +204,7 @@ Now we are ready to apply this function to the data simulation of the multi-item
 
 ### 3.4.1. Perceived Corporate Social Responsibility
 
-The code below shows the questionnaire items used to measure the perception of social responsability of the website. 
+The code below shows the questionnaire items used to measure the perception of social responsibility of the website. 
 
 ```{r}
 # Dataframe to display items
@@ -222,7 +222,7 @@ kable(measure.sr, "html", booktabs = TRUE,
 
 ```
 
-We simulate the responses to the social responsability items with slightly lower responses in the experimental group, but only within those who are customers of the retailer. 
+We simulate the responses to the social responsibility items with slightly lower responses in the experimental group, but only within those who are customers of the retailer. 
 
 ```{r}
 
@@ -386,7 +386,7 @@ kable(measure.pi, format = "html",
 
 ```
 
-We simulate the responses to the purchase intention items as moderately related to the perceived ease of use and slightly related to the perception of social responsability.
+We simulate the responses to the purchase intention items as moderately related to the perceived ease of use and slightly related to the perception of social responsibility.
 
 ```{r}
 # Use function in section 3.4 to simulate a preliminary distribution of scores
@@ -399,14 +399,14 @@ pi.scores <- f.sim.likert(n = data.n,
                            scale.min = 1, 
                            corr = 0.6)
 ##
-# Apply the relationship with ease of use and social responsability perceptions
+# Apply the relationship with ease of use and social responsibility perceptions
 ##
 
-# Define vectors for the standardized means of ease of use and social responsability
+# Define vectors for the standardized means of ease of use and social responsibility
 csr.mean <- scale(rowMeans(pay.df[, c("csr1", "csr2", "csr3", "csr4")]))
 eou.mean <- scale(rowMeans(pay.df[, c("eou1", "eou2", "eou3", "eou4")]))
 
-# Define the effect sizes for perceptions of easiness and social responsability
+# Define the effect sizes for perceptions of easiness and social responsibility
 csr.effect.size <- 0.1
 eou.effect.size <- 0.3 
 
@@ -470,7 +470,7 @@ kable(measure.cl, format = "html",
 ```
 
 
-We simulate the responses to the purchase intention items as moderately related to both perceived ease of use and the perception of social responsability.
+We simulate the responses to the purchase intention items as moderately related to both perceived ease of use and the perception of social responsibility.
 
 
 ```{r}
@@ -487,9 +487,9 @@ cl.scores <- f.sim.likert(n = data.n,
 # Apply higher scores for the customers group assigned to the experimental group
 ##
 
-# In section 3.4.3 we already defined the vectors with the means for ease of use (eou_mean) and social responsability (csr_mean)
+# In section 3.4.3 we already defined the vectors with the means for ease of use (eou_mean) and social responsibility (csr_mean)
 
-# Define the effect sizes for perceptions of easiness and social responsability
+# Define the effect sizes for perceptions of easiness and social responsibility
 csr.effect.size <- 0.7
 eou.effect.size <- 0.6
 
@@ -530,11 +530,11 @@ aggregate(pay.df$cl2, by = list (condition = pay.df$condition, customer = pay.df
 
 ### 3.4.5. Payment Method Adoption
 
-The level of adoption of ControvPay was measured at the end of the survey with question that asked participants which method they would choose among the ones presented. For the analyses, we simulate those who selected ControvPay in the experimental condition, setting lower probabilities to select it if participants provided low scores for social responsability. 
+The level of adoption of ControvPay was measured at the end of the survey with question that asked participants which method they would choose among the ones presented. For the analyses, we simulate those who selected ControvPay in the experimental condition, setting lower probabilities to select it if participants provided low scores for social responsibility. 
 
 ```{r}
 
-#Set a reference probability for customers not affected by social responsability issues
+#Set a reference probability for customers not affected by social responsibility issues
 prob.adoption <- rep (0.15, data.n)
 
 # Reduce the probability for those in the experimental condition who scored low in social responability
@@ -557,12 +557,12 @@ with(pay.df, table(adoption, condition))
 
 # 4. Reliability Analyses
 
-We use Cronbach's Alpha to evaluate the internal reliability of the multi-item questionnaire (social responsability, percepcion of ease of use, purchase intention, and loyalty). 
+We use Cronbach's Alpha to evaluate the internal reliability of the multi-item questionnaire (social responsibility, percepcion of ease of use, purchase intention, and loyalty). 
 
 
 ```{r}
 
-# Social responsability
+# Social responsibility
 rel.csr <- alpha(x= pay.df [ , c("csr1", "csr2", "csr3", "csr4")])
 summary(rel.csr)
 
@@ -586,7 +586,7 @@ The four scales show acceptable levels of internal reliability (Cronbach's Alpha
 ```{r}
 
 # Create variables with the average of the scales' items
-pay.df$social.responsability <- rowMeans(pay.df[, c("csr1", "csr2", "csr3", "csr4")])
+pay.df$social.responsibility <- rowMeans(pay.df[, c("csr1", "csr2", "csr3", "csr4")])
 pay.df$ease <- rowMeans(pay.df[, c("eou1", "eou2", "eou3", "eou4")])
 pay.df$purchase.intention <- rowMeans(pay.df[, c("pi1", "pi2")])
 pay.df$loyalty <- rowMeans(pay.df[, c("cl1", "cl2")])
@@ -631,6 +631,169 @@ The sample results indicated that:
 Yet, to make sure the results we obtained about the comparison across customers and experimental groups are reliable, we needed to check for demotragphic differences across those groups and the potential effect of the demographic variables on our outcomes. 
 
 
+# 6. Usage of ControvPay
+
+Before estimating the percentage of users who would use ControvPay as the first option, we first check if there are differences in this regard between users who indicated being customers of the retailer in the last year and those who did not. 
+
+```{r}
+# Obtain the frequency table
+adoption.customer.table <- with(pay.df, table(adoption, customer))
+adoption.customer.table
+
+# Obtain the table of proportions
+prop.table(adoption.customer.table, margin = 2)
+
+# Obtain the Chi-Square test
+chisq.test (adoption.customer.table)
+
+
+```
+
+The results suggest that there are not differences between the current retailer' customers and non customers. We therefore calculate the estimation of the use of ControvPay in the whole sample
+
+```{r}
+# Calculate the frequency table
+adoption.table <- with(pay.df, table(adoption))
+adoption.table
+
+# Calculate the proportion table
+prop.table(adoption.table)
+
+# Calculate confidence intervals for the adoption rate
+adoption.prop <- binom.test (x = adoption.table ["1"],
+            n = sum(adoption.table))
+adoption.prop
+
+# Prepare the results in a dataframe
+adoption.df <- data.frame(
+  category = c("not adopted ControvPay", "adopted ControvPay"),
+  percentage = as.numeric(prop.table(adoption.table)) * 100,
+  lower.ci = NA_real_,
+  upper.ci = NA_real_,
+  count = as.numeric(adoption.table)
+)
+adoption.df$lower.ci[adoption.df$category == "adopted ControvPay"] <- adoption.prop$conf.int[1] * 100
+adoption.df$upper.ci[adoption.df$category == "adopted ControvPay"] <- adoption.prop$conf.int[2] * 100
+
+adoption.df
+
+```
+
+
+```{r}
+
+# Plotting the bar graph
+ggplot(adoption.df[adoption.df$category == "adopted ControvPay", ], aes(x = category, y = percentage)) +
+  
+  # Type of graph
+  geom_col(width = 0.7, fill = "grey80") +
+  
+  # Error bars
+  geom_errorbar(
+    aes(ymin = lower.ci, ymax = upper.ci),
+        width = 0.2) +
+  
+  # Graph title
+  labs(
+    title = "Adoption of ControvPay",
+    y = "% of Customers",
+    x = " " ) +
+  
+  # Data labels
+  geom_text(
+    aes(y = upper.ci, label = paste0(round(percentage, 0), "%")),         # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -1,                             # slightly above the bar
+    size = 5
+  ) +
+  
+  # Y axis limits para que quepan las etiquetas
+  ylim(0, max(adoption.df$upper.ci, na.rm = TRUE) * 1.2) +
+  
+  # Formatting
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"), 
+           axis.text.x = element_blank() 
+  )
+  
+```
+
+
+
+
+
+```{r}
+###
+# Reusable Function to Calculate Percentages and their 95% CI
+###
+
+f.prop.dicdvl.1f <- function(my.data, my.dv.list, my.factor){
+  
+  # Initialize an empty list to store the sampled subsets from each stratum.
+  results <- list() 
+  
+  # Initialize a counter for indexing elements in the 'results' list.
+  p <- 1 
+  
+  # Obtain the levels of the factor
+  f.levels <- unique (my.data[[my.factor]])
+  
+  #Create a loop for each dv and for each level of the factors
+    for (dv in my.dv.list){
+      for (lf in f.levels){
+          
+          # Extract the vector, successes and number of cases
+          current.vector <- my.data[my.data[[my.factor]]==lf, dv]
+          current.vector.c <- as.numeric(current.vector[!is.na(current.vector)]) #cleaning missing cases
+          n <- length(current.vector.c) # number of cases in the vector
+          s <- length(current.vector.c[current.vector.c == 1]) # number of cases satisfying the condition
+          
+          # Calculate proportions and their 95% CI
+          if(n > 0){
+            proportion <- s / n #calculating proportions
+            binomial.test <- binom.test (s, n) # binomial test to calculate 95% CI of the proportions
+            ci_lower <- binomial.test$conf.int[1] #extracting the lower limit of the CI
+            ci_upper <- binomial.test$conf.int[2] #extracting the upper limit of the CI    
+          }else{
+            proportion <- NA
+            ci_lower <- NA
+            ci_upper <- NA
+          }
+
+          # Save the results in a named vector
+          results [[p]] <- data.frame(dep.variable = dv, factor = lf, percentage = proportion * 100, 
+                           ci_lower.perc = ci_lower * 100, ci_upper.perc = ci_upper * 100, n.cases = n, stringsAsFactors = FALSE)
+          p <- p + 1 
+          
+      } # close the loop for the factor
+    } # close the loop for the dv
+
+  #Combine the results in a dataframe and convert outcomes to numeric columns
+  results.df <- (do.call(rbind, results))
+  rownames(results.df) <- NULL
+
+  #Return the dataframe
+  return(results.df)
+}
+
+
+###
+# Application of the function
+###
+
+dv.list = c("adoption")
+
+adoption.df <- f.prop.dicdvl.1f (my.data = pay.df,
+                  my.dv.list = dv.list,
+                  my.factor = "customer")
+
+adoption.df
+
+
+```
+
+
+
 # 6. Checks for Balanced Comparisons
 
 
@@ -642,7 +805,7 @@ To gaing a more holistic picture, we include also other variables like condition
 
 ```{r}
 # Extract a dataframe with the variables to correlate
-cor.df <- pay.df [ , c("age", "gender", "condition", "customer", "social.responsability", "ease", "purchase.intention", "loyalty")]
+cor.df <- pay.df [ , c("age", "gender", "condition", "customer", "social.responsibility", "ease", "purchase.intention", "loyalty")]
 cor.df$gender <- as.numeric(ifelse(cor.df$gender == "woman", 0,1))
 cor.df$condition <- as.numeric(ifelse(cor.df$condition == "control", 0,1))
 cor.df$customer <- as.numeric(ifelse(cor.df$customer == "no", 0,1))
@@ -775,7 +938,7 @@ To evaluate the normality assumption, we conducted histograms, normal Q-Q plots,
 
 # Skewness and kurtosis
 
-normality.indexes.df <- describe (pay.df[ , c("social.responsability", "ease", "purchase.intention", "loyalty")])
+normality.indexes.df <- describe (pay.df[ , c("social.responsibility", "ease", "purchase.intention", "loyalty")])
 normality.indexes.df <- normality.indexes.df [ , c("skew", "kurtosis")]
 normality.indexes.df 
 
@@ -783,7 +946,7 @@ normality.indexes.df
 par(mfrow = c(2, 2))
 
 # Histograms
-hist(pay.df$social.responsability)
+hist(pay.df$social.responsibility)
 hist(pay.df$ease)
 hist(pay.df$purchase.intention)
 hist(pay.df$loyalty)
@@ -791,9 +954,9 @@ hist(pay.df$loyalty)
 
 # QQ plots
 
-# Social responsability
-qqnorm(pay.df$social.responsability, main = "social responsability")
-qqline(pay.df$social.responsability)
+# Social responsibility
+qqnorm(pay.df$social.responsibility, main = "social responsibility")
+qqline(pay.df$social.responsibility)
 
 # Ease of use
 qqnorm(pay.df$ease, main = "ease of use")
@@ -809,7 +972,7 @@ qqline(pay.df$loyalty)
 
 ```
 
-The distributions of purchase intentions and loyalty approximate closely to their theoretical normal distributions. The histogram for social responsability and ease of use perceptions suggest respectively  ceiling and bottom effects, leading to skewness. Yet, this level of skewness appears to be tolerable, as indicated by skewness indexes within the +/- 1 range, and QQplots where the distribution approximates to the theoretical normal distribution. We then proceed with the ANOVA models for all variables, as ANOVA is robust to moderate levels of normality deviations in large samples.  
+The distributions of purchase intentions and loyalty approximate closely to their theoretical normal distributions. The histogram for social responsibility and ease of use perceptions suggest respectively  ceiling and bottom effects, leading to skewness. Yet, this level of skewness appears to be tolerable, as indicated by skewness indexes within the +/- 1 range, and QQplots where the distribution approximates to the theoretical normal distribution. We then proceed with the ANOVA models for all variables, as ANOVA is robust to moderate levels of normality deviations in large samples.  
 
 
 ## 7.2. Factorial Anova Models
@@ -1234,7 +1397,7 @@ Now we can apply the function to our data.
 
 ```{r}
 
-dv.variables <- c("social.responsability", "ease", "purchase.intention", "loyalty")
+dv.variables <- c("social.responsibility", "ease", "purchase.intention", "loyalty")
 
 pay.results <- f.factorial.anova (
   my.data = pay.df,
@@ -1257,9 +1420,9 @@ pay.tukey.df
 ```
 
 
-Although we do not find any significant difference at the level p < 0.5, the interaction between the experimental condition and being customer was significant for the social responsability perception, with those who were customers of the retailer having a lower perception of responsability when exposed to the ControvPay option than those not exposed to it (d = -.27, Tukey p = .04). 
+Although we do not find any significant difference at the level p < 0.5, the interaction between the experimental condition and being customer was significant for the social responsibility perception, with those who were customers of the retailer having a lower perception of responsibility when exposed to the ControvPay option than those not exposed to it (d = -.27, Tukey p = .04). 
 
-For other dependent variables, all differences were far from being statistically significant, but at the descriptive level we can find that the results of loyalty follow a similar pattern than the one found for social responsability, in which the retailers customers have lower loyalty when exposed to the ControvPay option than those not exposed to it (d = -0.12, Tukey p = .594). 
+For other dependent variables, all differences were far from being statistically significant, but at the descriptive level we can find that the results of loyalty follow a similar pattern than the one found for social responsibility, in which the retailers customers have lower loyalty when exposed to the ControvPay option than those not exposed to it (d = -0.12, Tukey p = .594). 
 
 We can better see these interaction effects in bar graphs: 
 
@@ -1272,7 +1435,7 @@ pay.descriptives.int.df <- pay.descriptives.df [!(pay.descriptives.df$condition 
 
 # Titles for each faceted graph representing a type of complaint
 custom_titles <- c(
-  social.responsability   = "Soc. Responsability Perception",
+  social.responsibility   = "Soc. responsibility Perception",
   ease     = "Ease Perception",
   purchase.intention = "Purchase Intention",
   loyalty   = "Loyalty"
@@ -1329,13 +1492,13 @@ ggplot(pay.descriptives.int.df, aes(x = condition, y = mean, fill = customer)) +
 ```
 
 
-In the graph we can see that the difference in social responsability perception and loyalty for customers who experienced ControvPay are very small, just mildly lower than other participants. Yet, it is important to further evaluate the significance of these differences because they refer to possibilities of losing customers in case the company introduced the new payment method. We proceeded with Bayesian analyses to further evaluate this significance, and as a sensitivity complementation to our ANOVA analyses.  
+In the graph we can see that the difference in social responsibility perception and loyalty for customers who experienced ControvPay are very small, just mildly lower than other participants. Yet, it is important to further evaluate the significance of these differences because they refer to possibilities of losing customers in case the company introduced the new payment method. We proceeded with Bayesian analyses to further evaluate this significance, and as a sensitivity complementation to our ANOVA analyses.  
 
 
 
 ## Bayesian Sensitivity Analysis
 
-To conduct Bayesian Anova for the perception of social responsability and loyalty, we use a function from my Toolkit.
+To conduct Bayesian Anova for the perception of social responsibility and loyalty, we use a function from my Toolkit.
 
 To be able to have sensitivity in the evaluation of small effects, we use r = 0.1 as one of our priors. 
 
@@ -1418,7 +1581,7 @@ priors <- c(0.1, 0.5, 1)  # Vector con los dos tipos de "priors" que vamos a pro
 
 
 # Specifiy the DV list
-dvs <- c("social.responsability", "loyalty")
+dvs <- c("social.responsibility", "loyalty")
 
 # Specify the factors
 factors <- c("condition", "customer")
@@ -1441,19 +1604,19 @@ Given that even small decreases in social responsibility perceptions could be im
 
 ```{r}
 
-# Extract the model for social responsability
-m.soc.resp.0.1 <- bayes.anova.results[["social.responsability.prior.0.1"]]
+# Extract the model for social responsibility
+m.soc.resp.0.1 <- bayes.anova.results[["social.responsibility.prior.0.1"]]
 
 # Simulate the Monte Carlo chains
-chain.bayes.social.responsability <- posterior(m.soc.resp.0.1, 
+chain.bayes.social.responsibility <- posterior(m.soc.resp.0.1, 
                                                index = 7, 
                                                iterations = 10000)
 
 # Convergence diagnostics of Monte Carlo chains
-plot(chain.bayes.social.responsability [, 1:10])
+plot(chain.bayes.social.responsibility [, 1:10])
 
 # Inspect the Monte Carlo chains
-summary(chain.bayes.social.responsability)
+summary(chain.bayes.social.responsibility)
 
 
 ###
@@ -1461,28 +1624,28 @@ summary(chain.bayes.social.responsability)
 ###
 
 # Calculate the distributions for the main effects
-d.main.effects <- data.frame(chain.bayes.social.responsability[ , 2:5] + chain.bayes.social.responsability[ , 1])
+d.main.effects <- data.frame(chain.bayes.social.responsibility[ , 2:5] + chain.bayes.social.responsibility[ , 1])
 
 # Calculate the distributions for the interaction effects
-d.control.yes <- chain.bayes.social.responsability[ , "mu"] + 
-            chain.bayes.social.responsability[ , "condition-control"] +
-            chain.bayes.social.responsability[ , "customer-yes"] + 
-            chain.bayes.social.responsability[ , "condition:customer-control.&.yes"]
+d.control.yes <- chain.bayes.social.responsibility[ , "mu"] + 
+            chain.bayes.social.responsibility[ , "condition-control"] +
+            chain.bayes.social.responsibility[ , "customer-yes"] + 
+            chain.bayes.social.responsibility[ , "condition:customer-control.&.yes"]
 
-d.control.no <- chain.bayes.social.responsability[ , "mu"] + 
-            chain.bayes.social.responsability[ , "condition-control"] +
-            chain.bayes.social.responsability[ , "customer-no"] + 
-            chain.bayes.social.responsability[ , "condition:customer-control.&.no"]
+d.control.no <- chain.bayes.social.responsibility[ , "mu"] + 
+            chain.bayes.social.responsibility[ , "condition-control"] +
+            chain.bayes.social.responsibility[ , "customer-no"] + 
+            chain.bayes.social.responsibility[ , "condition:customer-control.&.no"]
 
-d.experimental.yes <- chain.bayes.social.responsability[ , "mu"] + 
-            chain.bayes.social.responsability[ , "condition-experimental"] +
-            chain.bayes.social.responsability[ , "customer-yes"] + 
-            chain.bayes.social.responsability[ , "condition:customer-experimental.&.yes"]
+d.experimental.yes <- chain.bayes.social.responsibility[ , "mu"] + 
+            chain.bayes.social.responsibility[ , "condition-experimental"] +
+            chain.bayes.social.responsibility[ , "customer-yes"] + 
+            chain.bayes.social.responsibility[ , "condition:customer-experimental.&.yes"]
 
-d.experimental.no <- chain.bayes.social.responsability[ , "mu"] + 
-            chain.bayes.social.responsability[ , "condition-experimental"] +
-            chain.bayes.social.responsability[ , "customer-no"] + 
-            chain.bayes.social.responsability[ , "condition:customer-experimental.&.no"]
+d.experimental.no <- chain.bayes.social.responsibility[ , "mu"] + 
+            chain.bayes.social.responsibility[ , "condition-experimental"] +
+            chain.bayes.social.responsibility[ , "customer-no"] + 
+            chain.bayes.social.responsibility[ , "condition:customer-experimental.&.no"]
 
 # Group the results
 estimations <- bind_cols(as.data.frame(d.main.effects), 
@@ -1519,8 +1682,8 @@ The convergence diagnostics indicate that the model estimations were stable and 
 # Gráfico más informativo
 ggplot(credible.intervals.soc.resp.df, aes(x = group, y = median)) +
   geom_pointrange(aes(ymin = lower.ci, ymax = upper.ci), 
-                  size = 0.7, color = "darkblue") +
-  geom_point(size = 2, color = "white") +
+                  size = 0.7, color = "black") +
+  geom_point(size = 2, color = "black") +
   labs(title = "Posterior Distributions - Social Responsibility Perception",
        subtitle = "Points show median estimates, bars show 95% credible intervals",
        y = "Social Responsibility Score (1-7 scale)", 
@@ -1585,12 +1748,12 @@ To identify potential issues with outliers, normality, linearity, homoscedastici
 customers.pay.df <- pay.df[pay.df$customer == "yes", ]
 
 # Model the two steps of path analysis for both DVs with multiple regression
-m.path.1 <- lm(social.responsability ~ condition, data = customers.pay.df)
-m.path.2.loyalty <- lm(loyalty ~ condition + social.responsability, data = customers.pay.df)
-m.path.2.purchase.intention <- lm(purchase.intention ~ condition + social.responsability, data = customers.pay.df)
+m.path.1 <- lm(social.responsibility ~ condition, data = customers.pay.df)
+m.path.2.loyalty <- lm(loyalty ~ condition + social.responsibility, data = customers.pay.df)
+m.path.2.purchase.intention <- lm(purchase.intention ~ condition + social.responsibility, data = customers.pay.df)
 
 # Obtain diagnostic plots
-
+par(mfrow =c(2,2)) #To set the graph objects to a 2x2 format
 plot(m.path.1)
 plot(m.path.2.loyalty) 
 plot(m.path.2.purchase.intention)
@@ -1615,6 +1778,59 @@ We did not observe major data problems. Although we observed some extreme scores
 We therefore maintain the analyses with all cases to avoid artificial data manipulations.
 
 
+## Path Modeling Purchase Intention
+
+To analyze the mediation effect of the experimental condition on purchase intention through the perception of social responsibility, we use the R extension PROCESS (https://www.processmacro.org/index.html).
+
+```{r}
+# Convert condition to numeric for PROCESS
+customers.pay.df$condition_num <- ifelse(customers.pay.df$condition == "experimental", 1, 0)
+
+# Run mediation analysis
+process(data = customers.pay.df, 
+        y = "purchase.intention", 
+        x = "condition_num", 
+        m = "social.responsibility", 
+        model = 4, 
+        boot = 5000,
+        seed = 123)
+
+```
+
+To better interpret the results, we represent them in a path diagram
+
+
+
+```{r}
+
+# Create diagram with DOT notation
+grViz("
+digraph mediation {
+  graph [layout = neato, overlap = false, fontname = Arial]
+  
+  node [shape = rectangle, style = filled, fillcolor = 'lightblue', fontname = Arial]
+  
+  Condition [pos = '0,1!', label = 'Adding ControvPay']
+  SocialResponsibility [pos = '2,2!', label = 'Social Responsibility\\nPerception']
+  PurchaseIntention [pos = '4,1!', label = 'Purchase Intention']
+  
+  // Direct Effects
+  Condition -> SocialResponsibility [label = 'a = -0.28*', fontsize = 12, color = 'black']
+  SocialResponsibility -> PurchaseIntention [label = 'b = 0.09 (ns)', fontsize = 12, color = 'grey', style = 'dashed']
+  Condition -> PurchaseIntention [label = 'c = 0.00 (ns)', fontsize = 12, color = 'grey', style = 'dashed']
+  
+  // Indirect Effect
+  Indirect [shape = plaintext, pos = '2,0!', fillcolor = 'none']
+  Indirect [label = 'Indirect Effect: a×b = -0.02\\n[95% CI: -0.07, 0.01]', fontsize = 14, color = 'darkred']
+}
+")
+
+```
+
+The path analysis indicates that social responsibility perceptions do not significantly mediate the relationship between ControvPay exposure and purchase intention. The indirect effect is negligible (effect = -0.02) and the 95% confidence interval includes zero [-0.07, 0.01], indicating statistical non-significance.
+
+This suggests that while social responsibility perceptions affect loyalty, they do not translate into significant changes in immediate purchase intentions among existing customers.
+
 
 ## Path Modeling for Loyalty
 
@@ -1622,49 +1838,404 @@ To analyze the mediation effect of the experimental condition on loyalty through
 
 ```{r}
 
-# Convert condition to numeric for PROCESS
-customers.pay.df$condition_num <- ifelse(customers.pay.df$condition == "experimental", 1, 0)
+
 
 # Run mediation analysis
 process(data = customers.pay.df, 
         y = "loyalty", 
         x = "condition_num", 
-        m = "social.responsability", 
+        m = "social.responsibility", 
         model = 4, 
         boot = 5000,
         seed = 123)
+
+```
+
+To better visualize the results from this output, we represent them in a path diagram.
+
+```{r}
+
+# Create diagram with DOT notation
+grViz("
+digraph mediation {
+  graph [layout = neato, overlap = false, fontname = Arial]
+  
+  node [shape = rectangle, style = filled, fillcolor = 'lightblue', fontname = Arial]
+  
+  Condition [pos = '0,1!', label = 'Adding ControvPay']
+  SocialResponsibility [pos = '2,2!', label = 'Social Responsibility\\nPerception']
+  Loyalty [pos = '4,1!', label = 'Loyalty']
+  
+  // Direct Effects
+  Condition -> SocialResponsibility [label = 'a = -0.28*', fontsize = 12, color = 'black']
+  SocialResponsibility -> Loyalty [label = 'b = 0.54 ***', fontsize = 12, color = 'black']
+  Condition -> Loyalty [label = 'c = -0.03 (ns)', fontsize = 12, color = 'grey', style = 'dashed']
+  
+  // Indirect Effect
+  Indirect [shape = plaintext, pos = '2,0!', fillcolor = 'none']
+  Indirect [label = 'Indirect Effect: a×b = -0.15*\\n[95% CI: -0.27, -0.04]', fontsize = 14, color = 'darkred']
+}
+")
 
 ```
 
 The path analysis confirms that social responsibility perceptions significantly mediate the relationship between ControvPay exposure and customer loyalty, accounting for a reduction of 0.15 points in the loyalty scale [95% CI: -0.27, -0.04]. We will proceed with further analysis of this mediation effect's practical implications in Section X.
 
 
-## Path Modeling Purchase Intention
 
-To analyze the mediation effect of the experimental condition on purchase intention through the perception of social responsibility, we also use the R extension PROCESS (https://www.processmacro.org/index.html).
+# Business Impact
+
+Up to now, we have seen that the introduction of ControvPay can generate negative effects in the perceptions of social responsibility and loyalty of the retailers's customers. Yet, for taking decisions it was important to quantify how many customers we predicted to switch from a positive perception of social responsibility to a negative one, or from being a loyal customer to not. 
+
+For these predictions, we will consider the neutral points of the scales as cut-points, especifically: 
+
+* Scores below 4 in social responsibility perception, will be considered a negative one. 
+* Scores below 4 in loyalty, will be considered to represent unloyal customers. 
+
+For simplicity in the calculation of the metrics, we also create a dichotomous numeric variable about the experimental condition
+
 
 ```{r}
 
-# Run mediation analysis
-process(data = customers.pay.df, 
-        y = "purchase.intention", 
-        x = "condition_num", 
-        m = "social.responsability", 
-        model = 4, 
-        boot = 5000,
-        seed = 123)
+# Create the dicotomous variable accounting for negative social responsibility perception
+customers.pay.df$neg.social.responsibility <- NA_real_
+customers.pay.df$neg.social.responsibility [customers.pay.df$social.responsibility < 4] <- 1
+customers.pay.df$neg.social.responsibility [customers.pay.df$social.responsibility >= 4] <- 0
+
+# Create the dicotomous variable accounting for unloyal customers
+customers.pay.df$unloyalty <- NA_real_
+customers.pay.df$unloyalty [customers.pay.df$loyalty < 4] <- 1
+customers.pay.df$unloyalty [customers.pay.df$loyalty >= 4] <- 0
+
+# Create a dicotomous variable for the condition factor
+customers.pay.df$controvpay <- NA_real_
+customers.pay.df$controvpay [customers.pay.df$condition == "experimental"] <- 1
+customers.pay.df$controvpay [customers.pay.df$condition == "control"] <- 0
+
+# Check the distributions
+summary(customers.pay.df)
+
 
 ```
 
+We can see that 8% of the retailers' customers reported a negative perception of social responsibility, and 37% reported unloyalty. 
 
-The path analysis indicates that social responsibility perceptions do not significantly mediate the relationship between ControvPay exposure and purchase intention. The indirect effect is negligible (effect = -0.02) and the 95% confidence interval includes zero [-0.07, 0.01], indicating statistical non-significance.
+To predict how these scores would vary depending on the exposure to ControvPay, and the uncertainty of these predictions, we will use logistic binomial models and a function from our Toolkit to obtain predictive interpretation measures from these models. We specify the function below: 
 
-This suggests that while social responsibility perceptions affect loyalty, they do not translate into significant changes in immediate purchase intentions among existing customers.
+```{r}
+#####
+#Function to obtain key interpretation metrics for a binomial logistic model
+#####
 
 
+f.metrics.binomial <- function(my.model, my.matrix){
+  
+  #--------1. Preliminary Checks: 
+  
+  # Making sure the model is glm binomial
+  if (!inherits(my.model, "glm") || my.model$family$family != "binomial") {
+    stop("The function requires a binomial model.")
+  }
+  
+  
+  #--------2. Odds Ratios
+  
+  # Obtaining the coefficients and confidence intervals
+  coefs <- coef(my.model)
+  ci <- confint(my.model)
+  intercept <- coefs[1]
+  
+  # Exponentiation of the coefficients and their CIs to obtain odds ratios
+  or <- exp(coefs)
+  or_ci <- exp(ci)
+  
+  
+  #--------3. Relative Probabilities (Risk Ratios)
+  
+  # Calculating the base probability from the intercept
+  p0 <- or[1] / (1 + or[1])
+  
+  # Obtaining relative probabilities from risk ratios and base probability
+  rp <- or / ((1 - p0) + (p0 * or))
+  rp_ci_low <- or_ci[, 1] / ((1 - p0) + (p0 * or_ci[, 1]))
+  rp_ci_high <- or_ci[, 2] / ((1 - p0) + (p0 * or_ci[, 2]))
+  
+  
+  #--------4. Predicted Proportions
+  
+  # Extract log-odds and their sd for the individual presence of the factors (using the specified matrix)
+  pred <- predict(my.model, newdata = my.matrix, type = "link", se.fit = TRUE)
+
+  #Calculate confidence intervals in log-odds
+  lower_logit <- pred$fit - 1.96 * pred$se.fit
+  upper_logit <- pred$fit + 1.96 * pred$se.fit
+
+  #Specify a function to transform log-odds to probabilities
+  f.inv_logit <- function(x) {1 / (1 + exp(-x))}
+  
+  #Apply the function to the log-odds and the limits of their ci
+  predicted_prob <- f.inv_logit(pred$fit) # Predicted probabilities
+  lower_predicted_prob <- f.inv_logit(lower_logit) # Lower limit of CI for predicted probabilities
+  upper_predicted_prob <- f.inv_logit(upper_logit) # Upper limit of CI for predicted probabilities
+
+  
+  #--------5. Differences in Predicted Probabilities via Bootstrap
+
+  # Simulate a distribution of log-odds, for example with 10000 cases
+  set.seed(123)
+  simulated_log_odds <- as.data.frame(matrix(
+  rnorm(10000 * length(pred$fit), mean = pred$fit, sd = pred$se.fit),
+  ncol = length(pred$fit), 
+  byrow = TRUE # the data is simulated line by line, so the values goes to the column of the corresponding factor
+  ))
+
+  # Transform logg-odds to expected probabilities (using the function specified above)
+  simulated_probs <- f.inv_logit(simulated_log_odds)
+
+  # Calculate differences from the first column, which correspond to the intercept probabilities
+  diffs <- apply(simulated_probs, 2, function(col){
+  col - simulated_probs[[1]]
+  })
+
+  # Calculate the means of the differences and 95% CI with percentiles
+  prob_diff <- colMeans(diffs)
+  lower_prob_diff  <- apply(diffs, 2, quantile, probs = 0.025)
+  upper_prob_diff <- apply(diffs, 2, quantile, probs = 0.975)
+  
+  
+  #-------- 6. Combine Results
+  
+  results <- data.frame(
+    Term = names(rp),
+    Prediction = as.numeric(predicted_prob)*100,
+    Lower_Prediction = as.numeric(lower_predicted_prob)*100,
+    Upper_Prediction = as.numeric(upper_predicted_prob)*100,
+    Predicted_Change = as.numeric(prob_diff)*100,
+    Lower_Predicted_Change = as.numeric(lower_prob_diff)*100,
+    Upper_Predicted_Change = as.numeric(upper_prob_diff)*100,
+    Relative_Probability = as.numeric(rp),
+    Lower_Relative_Probability = as.numeric(rp_ci_low),
+    Upper_Relative_Probability = as.numeric(rp_ci_high),
+    Odds_Ratio = as.numeric(or),
+    Lower_Odds_Ratio = as.numeric(or_ci[,1]),
+    Upper_Odds_Ratio = as.numeric(or_ci[,2])
+)
+  
+  # Remove meaningless metrics for intercept
+  results[1, c("Predicted_Change",
+             "Lower_Predicted_Change",
+             "Upper_Predicted_Change",
+             "Relative_Probability",
+             "Lower_Relative_Probability",
+             "Upper_Relative_Probability",
+             "Odds_Ratio",
+             "Lower_Odds_Ratio",
+             "Upper_Odds_Ratio")] <- NA_real_
+
+  
+  # Return the results
+  return(results)
+}
+
+```
+
+After applying these specifications, we are ready to calculate the expected impact of adding ControvPay on the retailer's social responsibility perceptions and loyalty. 
 
 
+## Impact on Social Responability Perception
 
+To make predictions, we especified a binomial logistic model to predict social responsibility perception from the experimental condition within our customers dataframe, then obtained predictive measures. 
+
+```{r}
+
+# Specify the model
+m.neg.social.responsibility <- glm (neg.social.responsibility ~ controvpay, data = customers.pay.df, family = "binomial")
+summary(m.neg.social.responsibility)
+
+
+#####
+# Specify the design matrix for predictions
+#####
+
+# Extract the factor names from the model, with and without the intercept
+f.names.interc <- names(coef(m.neg.social.responsibility))
+f.names <- f.names.interc[-1]
+
+# Create a matrix with 1s on the diagonal for each factor, 0 othewise
+my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
+my.matrix.df[, 1] <- f.names.interc
+names(my.matrix.df) <- c("case", f.names)
+
+# Check the matrix structure
+my.matrix.df
+
+
+#####
+# Calculate the model metrics
+#####
+
+metrics.neg.social.responsibility <- f.metrics.binomial (my.model = m.neg.social.responsibility, 
+                                                         my.matrix = my.matrix.df)
+metrics.neg.social.responsibility
+
+
+```
+
+We can see that the introduction of ControvPay is associated with a 4% increase of customers having negative perceptions of the social responsability of the retailer within the retailers' customer base. This comparison is also displayed in a graph in section x. 
+
+## Impact on Loyalty
+
+We followed a similar procedure as in the prior section to make predictions about loyalty: 
+* We first specified the model to predict loyalty from the exposition to ControvPay
+* Then specified a matrix that represents cases with the exposition to ControvPay or not
+* Then obtained predictive metrics from the model and the matrix. 
+
+```{r}
+
+# Specify the model
+m.unloyalty <- glm (unloyalty ~ controvpay, data = customers.pay.df, family = "binomial")
+summary(m.unloyalty)
+
+
+#####
+# Specify the design matrix for predictions
+#####
+
+# Extract the factor names from the model, with and without the intercept
+f.names.interc <- names(coef(m.unloyalty))
+f.names <- f.names.interc[-1]
+
+# Create a matrix with 1s on the diagonal for each factor, 0 othewise
+my.matrix.df <- as.data.frame(diag(length(f.names.interc)))
+my.matrix.df[, 1] <- f.names.interc
+names(my.matrix.df) <- c("case", f.names)
+
+# Check the matrix structure
+my.matrix.df
+
+
+#####
+# Calculate the model metrics
+#####
+
+metrics.unloyalty <- f.metrics.binomial (my.model = m.unloyalty, 
+                                                         my.matrix = my.matrix.df)
+metrics.unloyalty
+
+
+```
+
+The introduction of ControvPay is expected to be associated with a 4.6 % decrease in loyal customers within the retailers' customer base. This comparison is also displayed in a graph in section x. 
+
+
+# Visual Representation of the Impact
+
+
+```{r}
+
+# Merge the results
+metrics.unloyalty$dep.variable <- "loyalty"
+metrics.neg.social.responsibility$dep.variable <- "social.responsibility"
+metrics.df <- bind_rows(metrics.neg.social.responsibility, metrics.unloyalty)
+metrics.df
+
+# Setting the order of the DVs
+metrics.df$dep.variable <- factor(metrics.df$dep.variable, levels = c("social.responsibility", "loyalty"))
+
+# Titles for each faceted graph representing each DV
+custom_titles <- c(
+  social.responsibility   = "Negative Perception of\nSocial Responsibility",
+  loyalty    = "Disloyalty")
+
+
+# Plotting the bar graph
+ggplot(metrics.df, aes(x = Term, y = Prediction)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7, fill = "grey80") + 
+  
+  # Error bars
+  geom_errorbar(
+    aes(ymin = Lower_Prediction, ymax = Upper_Prediction),
+    position = position_dodge(width = 0.8),
+    width = 0.2) + 
+  
+  # Facets for each dv
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", 
+             labeller = labeller(dep.variable = custom_titles),
+             strip.position = "top") + 
+  
+  # Graph title and y title
+   labs(
+    y = "% of Customers", 
+    title = "Expected Impact on Retailers' Customers") + 
+  
+  # x Titles
+  scale_x_discrete(labels = c ("Current\nSituation", "After Adding\nControvPay")) + 
+  
+  # Limits in y axis
+  ylim(0, 60) + 
+  
+  # Data labels
+  geom_text(
+    aes(y = Upper_Prediction, label = paste0(round(Prediction, 0), "%")), # label with percentage rounded
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -1,                             # slightly above the bar
+    size = 3.5                                # text size
+  ) +
+  
+  # Formatting
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.title.x = element_blank(),
+    strip.placement = "outside",
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold", size = 11), # the panel titles
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5, size = 11),  
+    plot.margin = margin(10, 5, 10, 5)
+  )
+
+```
+
+In the graph we can see the changes that the introduction of ControvPay are expected to change on the retailers'  customers: 
+* more customers with a negative perception of social responsability.
+* more customers becoming unloyal, that is, saying that probably will not visit back the website again.
+
+Even though these predictions are subject to error, and the error bars suggest that it would also be expected that the introduction of ControvPay will not produce any change, the most probable outcome is the negative one reflected by the percentages in the graph. 
+
+
+# 9. Discussion
+
+## 9.1. Managerial Implications
+
+Our analysis suggest that, although ControvPay is the preferred payment option for 3% of the customers, its introduction is only expected to bring negative consequences to the business: 
+* It is not expected to increase the intention to purchase nor the easiness of the payment process. 
+* Within the retailer's customer base, it is expected to: 
+  * increase in 4% the customers having negative image of the social responsability of the retailer
+  * increase in 4.6% the unloyalty of customers, that is, those predicting not comming back. 
+Attending to these risks and the absence of positive implications, we recommend to wait for the introduction of ControvPay until further evidence sugest more promising results. 
+
+
+## 9.2. Limitations
+
+It is important to recognize several limitations. First, the sample size was limited for the small effects that we found, which could have limit our power to identify other relevant effects on the intention to purchase or other methods for which we found no statistical differences. Second, the analyses are based on reported data in an unnatural environment: the presentation of the payment options in isolation. Evaluations with observational measures of real interactions in the web might produce different pattern of results. 
+
+
+## 9.3. Next Steps
+
+Future work could extend these analyses by:
+
+* Evaluating the impact of including ControvPay with real interactions of customers in the retailer's website through A/B tests.
+
+* Replications of this study with higher sample sizes. 
+
+* Exploring heterogeneity across customer segments, to identify whether some groups are more sensitive to the ControvPay introduction.
+
+
+# Appendix
+
+To save the dataframes we can  use the code below
 
 ```{r}
 write.csv(pay.df, "pay.df.csv")
