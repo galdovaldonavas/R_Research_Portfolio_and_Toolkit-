@@ -1,0 +1,842 @@
+
+---
+title: "ANOVA. Frequentist and Bayesian Approach"
+output:
+  html_document:
+    df_print: paged
+    css: my_style.css
+  html_notebook:
+    css: my_style.css
+  pdf_document: default
+---
+  
+  
+  
+# Introduction  
+
+This ANOVA toolkit includes reusable functions to conduct frequentist analyses across a group of dependent variables. It provides useful related analyses, including post-hoc Tukey tests, descriptive statistics, effect sizes, and graphs.
+
+In addition, it includes functions to perform the ANOVA analyses with a Bayesian approach, with the possibility to specify different priors. 
+
+# Setup
+
+We start by loading the required packages for data manipulation and visualization. 
+
+```{r}
+
+# Visualization
+library(ggplot2)     # General plotting
+
+# Analysis
+library(BayesFactor) # Bayesian Analysis
+
+```
+
+We also load the database used for the examples: 
+
+```{r}
+data <- read.csv("pay.df.csv")
+summary(data)
+
+```
+
+# Frequentist Approach
+
+## Anova with 2 Factors
+
+### Reusable Function
+
+This function allows to evaluate factorial ANOVAs with 2 factors across a variety of dependent variables in our dataset.  
+
+```{r}
+
+# Function for obtaining factorial ANOVA results for multiple DVs across 2 factors
+
+# Function name: f.factorial.anova.2f
+#
+# Input parameters:
+#   my.data: the dataframe
+#   my.dv.list: vector of dependent variable names
+#   my.factor1: first factor variable
+#   my.factor2: second factor variable
+#
+# Output: list containing:
+#   anova: ANOVA results for main effects and interactions, with effect sizes (eta squared)
+#   descriptives: means, standard deviations, and 95% CI for all effects
+#   tukey: post-hoc comparisons with Cohen's d effect sizes
+
+f.factorial.anova.2f <- function (my.data, my.dv.list, my.factor1, my.factor2) {
+  
+  # Initialize lists for results storage
+  anova.results <- list()    # ANOVA results
+  descriptive.results <- list()  # Descriptive statistics
+  cohen.d.results <- list()  # Cohen's d results
+  tukey.results <- list()    # Tukey post-hoc results
+  a <- d <- c <- t <- 1  # List indices for the lists above
+
+  # Obtain factor levels
+  f1.levels <- unique (my.data[[my.factor1]])
+  f2.levels <- unique (my.data[[my.factor2]])
+  
+  # Specify function for Cohen d calculation
+    f.cohen.d.calculation <- function (groups.data, groups.matrix, dv.name, effect.name, level.names) {
+    
+      # Create a list to store the results
+      fd.results.list <- list()
+      fd <- 1 # index for the above list
+    
+      # Open a loop for each comparison
+      for (i.comparison in 1:nrow(groups.matrix)){
+      
+        # Obtain the group indexes to compare
+        index.g1 <- groups.matrix [i.comparison, 1]
+        index.g2 <- groups.matrix [i.comparison, 2]
+      
+        # Obtain the names of groups compared
+        name.g1 <- groups.data [index.g1, level.names]
+        name.g2 <- groups.data [index.g2, level.names]
+      
+        # Obtain the means of groups compared
+        mean.g1 <- groups.data [index.g1, "mean"]
+        mean.g2 <- groups.data [index.g2, "mean"]
+      
+        # Obtain the sd of groups compared
+        sd.g1 <- groups.data [index.g1, "sd"]
+        sd.g2 <- groups.data [index.g2, "sd"]
+      
+        # Obtain the n of groups compared
+        n.g1 <- groups.data [index.g1, "n"]
+        n.g2 <- groups.data [index.g2, "n"]     
+      
+        # Calculate the pooled standard deviation
+        pooled.sd <- sqrt(((n.g1 - 1) * sd.g1^2 + (n.g2 - 1) * sd.g2^2) / (n.g1 + n.g2 - 2))
+      
+        # Calculate Cohen's d
+        cohen.d <- (mean.g1 - mean.g2)/ pooled.sd
+      
+        # Save the results for each comparison
+        comparison.cohen.d.result <- data.frame (
+          dep.variable = dv.name,
+          effect = effect.name,
+          group1 = name.g1,
+          group2 = name.g2,
+          d = cohen.d, 
+          sd.pooled = pooled.sd
+        )
+        fd.results.list [[fd]] <- comparison.cohen.d.result
+        fd <- fd + 1
+      
+      } # Close the loop within the f.cohen.d.calculation   
+      
+      d.function.results <- do.call(rbind, fd.results.list)
+      
+    # Return the result for the effect
+    return (d.function.results)
+   
+    } # Close the f.cohen.d.calculation function
+      
+  # Initiate a loop for each dv
+  for (dv in my.dv.list) {
+    
+    
+#--- 1. Metrics for the ANOVA models
+    
+    # Build a dynamic formula
+    anova.formula <- as.formula (paste0(dv, "~", my.factor1, "*", my.factor2))
+
+    # Fit the ANOVA model
+    anova.model <- aov(anova.formula, data = my.data)
+    
+    # Extract the model in a dataframe
+    anova.table <- anova(anova.model)
+    
+    # Bind the anova table with a dataframe that contains the dv names
+    anova.result.df <- data.frame (dep.variable = rep(dv, nrow(anova.table)), 
+                                    effect = rownames(anova.table))
+    anova.result.df <- bind_cols (anova.result.df, anova.table)
+    
+    # Add the eta squared (Proportional Reduction in Error)
+    ss.total <- sum(anova.table[ , "Sum Sq"]) # sum of error
+    anova.result.df$eta.squared <- anova.result.df[["Sum Sq"]] / ss.total
+    
+    # Save the results
+    anova.results [[a]] <- anova.result.df
+    a <- a + 1
+    
+ 
+    
+#--- 2. Posthoc Comparison with Tukey
+    
+    # Obtain the Tukey results
+    tukey <- TukeyHSD(anova.model)
+    
+    # Bind the comparisons for main effects and interaction effects in a single dataframe
+    for (name.effect in names(tukey)) {
+      
+      # Extract the comparisons for the effect
+      tukey.df <- as.data.frame(tukey[[name.effect]])
+      tukey.df$dep.variable <- dv
+      tukey.df$effect <- name.effect
+      tukey.df$comparison <- rownames(tukey.df)
+      tukey.results [[t]] <- tukey.df
+      t <- t + 1
+    } # Close the loop for the Tukey effect       
+    
+    
+    
+#--- 3. Descriptive Statistics
+    
+    # -- 3.1. Descriptives for factor 1
+    
+    # Open a loop for factor 1
+    for (f1.level in f1.levels){
+      
+      # Create a vector with the scores of each level in factor 1
+      current.vector <- my.data[my.data[[my.factor1]] == f1.level , dv]
+      
+      # Clean missind data
+      current.vector.c <- current.vector[!is.na(current.vector)]
+      
+      # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+      mean.level <- mean(current.vector.c)
+      sd.level <- sd(current.vector.c)
+      n.level <- length(current.vector.c)
+      se.level <- sd.level / sqrt(n.level)
+      upper.ci.level <- mean.level + 1.96 * se.level
+      lower.ci.level <- mean.level - 1.96 * se.level
+      
+      # Save the results
+      level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1.levels = f1.level,
+        factor2.levels = paste0 ("all"),
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level, 
+        level.name = f1.level)
+      
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+    
+    } # Close the loop for factor 1
+     
+    
+    # -- 3.2. Descriptives for factor 2
+      
+    # Open a loop for factor 2
+    for (f2.level in f2.levels){
+      
+      # Create a vector with the scores of each level in factor 2
+      current.vector <- my.data[my.data[[my.factor2]] == f2.level , dv]
+      
+      # Clean missind data
+      current.vector.c <- current.vector[!is.na(current.vector)]
+      
+      # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+      mean.level <- mean(current.vector.c)
+      sd.level <- sd(current.vector.c)
+      n.level <- length(current.vector.c)
+      se.level <- sd.level / sqrt(n.level)
+      upper.ci.level <- mean.level + 1.96 * se.level
+      lower.ci.level <- mean.level - 1.96 * se.level
+      
+      # Save the results
+      level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1.levels = paste0 ("all"),
+        factor2.levels = f2.level,
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level,
+        level.name = f2.level
+      )
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+      
+      } # Close the loop for factor 2
+    
+    
+    # -- 3.3. Descriptives for the interaction
+    
+      # Open loops for the interaction
+
+      for (f1.level in f1.levels){
+        for (f2.level in f2.levels){
+      
+        # Create a vector with the scores of the interaction level
+        current.vector <- my.data [my.data[[my.factor1]] == f1.level &  my.data[[my.factor2]] == f2.level, dv ]
+      
+        # Clean missind data
+        current.vector.c <- current.vector[!is.na(current.vector)]
+      
+        # Obtain the mean, standard deviations, standard errors, n, and 95% CI
+        mean.level <- mean(current.vector.c)
+        sd.level <- sd(current.vector.c)
+        n.level <- length(current.vector.c)
+        se.level <- sd.level / sqrt(n.level)
+        upper.ci.level <- mean.level + 1.96 * se.level
+        lower.ci.level <- mean.level - 1.96 * se.level
+      
+        # Save the results
+        level.descriptive.results <- data.frame (
+        dep.variable = dv, 
+        factor1.levels = f1.level,
+        factor2.levels = f2.level,
+        mean = mean.level,
+        sd = sd.level,
+        upper.ci = upper.ci.level,
+        lower.ci = lower.ci.level,
+        se = se.level,
+        n = n.level,
+        level.name = paste0(f1.level, ":", f2.level)
+      )
+      
+      descriptive.results[[d]] <- level.descriptive.results
+      d <- d + 1
+    
+    } # Close the loop of factor 1 in the interaction loops
+      }  # Close the loop of factor 2 in the interaction loop
+    
+    
+# --- 4. Cohen's d Calculations
+    
+    # -- 4.1. Cohen's d for factor 1 comparisons
+    
+    # Extract the descriptives for factor 1
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                   data.groups.to.compare$factor2.levels == "all", ]
+    
+    # Obtain the number of groups
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the group combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Apply the f.cohen.d.calculation function to calculate the d results for factor 1
+    factor1.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = my.factor1, 
+      level.names = "level.name"
+    )
+    
+    # Save the d results for the factor 1  groups
+    cohen.d.results[[c]] <- factor1.d.results
+    c <- c + 1
+    
+    
+    # -- 4.2. Cohen's d for factor 2 comparisons
+    
+    # Extract the descriptives for factor 2
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                   data.groups.to.compare$factor1.levels == "all", ]
+    
+    # Obtain the number of groups
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the group combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Apply the f.cohen.d.calculation function to calculate the d results for factor 2
+    factor2.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = my.factor2,
+      level.names = "level.name"
+    )    
+    
+    # Save the d results for the factor 2  groups
+    cohen.d.results[[c]] <- factor2.d.results
+    c <- c + 1  
+    
+
+    # -- 4.3. Cohen's d for the interaction comparisons
+    
+    # Extract the descriptives for the interaction
+    data.groups.to.compare <- do.call(rbind, descriptive.results)
+    data.groups.to.compare <- data.groups.to.compare[data.groups.to.compare$dep.variable == dv & 
+                                  data.groups.to.compare$factor1.levels != "all" &
+                                  data.groups.to.compare$factor2.levels != "all", 
+                                  ]
+    
+    # Obtain the number of groups
+    n.groups <- nrow(data.groups.to.compare)
+    
+    # Obtain a matrix with the group combination indexes
+    comparison.matrix <- as.data.frame(t(combn(1:n.groups, 2)))
+    
+    # Apply the f.cohen.d.calculation function to calculate the d results for the interaction
+    interaction.d.results <- f.cohen.d.calculation(
+      groups.data = data.groups.to.compare,
+      groups.matrix = comparison.matrix,
+      dv.name = dv,
+      effect.name = paste0(my.factor1, ":", my.factor2),
+      level.names = "level.name"
+    )    
+    
+    # Save the d results for the factor 2  groups
+    cohen.d.results[[c]] <- interaction.d.results
+    c <- c + 1  
+    
+
+    
+} # close the dv loop
+  
+
+    
+#--- 5. Save all the results
+
+  
+  #--- ANOVA Results
+  
+  # Group the anova results in a dataframe
+  anova.results.df <- do.call(rbind, anova.results)
+  rownames(anova.results.df) <- NULL
+  
+  # Round the data columns
+  numeric.cols <- sapply(anova.results.df, is.numeric)
+  anova.results.df[numeric.cols] <- round(anova.results.df[numeric.cols], 3)
+  
+  
+  #--- Descriptive Results
+  
+  # Group the descriptives for all levels
+  descriptives.df <- do.call(rbind, descriptive.results)
+  
+  # Round the columns
+  numeric.cols <- sapply(descriptives.df, is.numeric)
+  descriptives.df[numeric.cols] <- round(descriptives.df[numeric.cols], 2)
+  
+  # Rename the factor columns
+  names (descriptives.df)[names(descriptives.df) == "factor1.levels"] <- my.factor1
+  names (descriptives.df)[names(descriptives.df) == "factor2.levels"] <- my.factor2
+  
+  
+  #--- Cohen's d Results
+  
+  # Group the d results for all comparisons
+  cohen.d.df <- do.call(rbind, cohen.d.results)
+  
+  # Add a "comparison" variable" to use as a key for the Tukey results, duplicating all comparisons with the altered order
+  cohen.d.df1 <- cohen.d.df
+  cohen.d.df1$comparison <- paste0 (cohen.d.df1$group1, "-", cohen.d.df1$group2)
+  cohen.d.df2 <- cohen.d.df
+  cohen.d.df2$comparison <- paste0 (cohen.d.df2$group2, "-", cohen.d.df2$group1)
+  cohen.d.df2$d <- cohen.d.df2$d *(-1)
+  doubled.cohen.d.df <- bind_rows(cohen.d.df1, cohen.d.df2)
+  
+  
+  #--- Tukey Results
+  
+  # Group all the Tukey results
+  tukey.results.df <- do.call(rbind, tukey.results)
+  rownames(tukey.results.df) <- NULL
+  
+  # Reorder the columns
+  index.tukey <- tukey.results.df [ , c("dep.variable", "effect", "comparison")]
+  tukey.results.df[ , c("dep.variable", "effect", "comparison")] <- NULL
+  tukey.results.df <- bind_cols(index.tukey, tukey.results.df)
+  
+  # Add the Cohen's d results
+  tukey.results.df <- merge(tukey.results.df, doubled.cohen.d.df, by = c("dep.variable", "effect", "comparison"), all.x = TRUE)
+  tukey.results.df$group1 <- NULL
+  tukey.results.df$group2 <- NULL
+
+  #--- List with all the results
+  
+  results <- list(anova = anova.results.df, 
+                  descriptives = descriptives.df,
+                  cohen.d = cohen.d.df,
+                  tukey = tukey.results.df)
+  
+  # Return the results
+  return(results)
+
+}
+
+```
+
+### Example of Usage: 
+
+This example uses the **pay.df** dataframe, based on the project: "Corporate responsibility Versus Easiness of E-Commerce Payments Methods: An Experimental Study."
+
+We applied the function to analyze the following variables: 
+ * **DVs:** Questionnaire scores for social responsibility perception, ease perceptions, purchase intention, and loyalty.
+ * **Factor 1 (`condition`):** Two experimental groups (control vs. ControvPay exposition).
+ * **Factor 2 (`customer`):** Whether participants were customers ("yes") or non-customers ("no") of the retailer.
+
+```{r}
+
+# Vector of dependent variable names
+dv.variables <- c("social.responsibility", "ease", "purchase.intention", "loyalty")
+
+# Application of ANOVA function
+pay.results <- f.factorial.anova.2f(
+  my.data = pay.df,
+  my.dv.list = dv.variables,
+  my.factor1 = "condition",
+  my.factor2 = "customer"
+)
+
+# Extract ANOVA results
+pay.anova.df <- pay.results$anova
+pay.anova.df
+
+# Extract descriptive statistics
+pay.descriptives.df <- pay.results$descriptives
+pay.descriptives.df
+
+# Extract post-hoc comparisons
+pay.tukey.df <- pay.results$tukey
+pay.tukey.df
+
+```
+
+
+### Example for Plotting Results
+
+Let's suppose we are interested in plotting the interaction effect. We can visualize it with a bar graph:
+
+```{r}
+
+# Select interaction descriptives for graphing
+pay.descriptives.int.df <- pay.descriptives.df [!(pay.descriptives.df$condition == "all") & !(pay.descriptives.df$customer =="all"), ]
+
+# Specify the order of the DVs
+pay.descriptives.int.df$dep.variable <- factor(pay.descriptives.int.df$dep.variable, levels = c("ease", "social.responsibility", "purchase.intention", "loyalty"))
+
+# Custom titles for faceted graphs
+custom_titles <- c(
+  social.responsibility   = "Social Responsibility Perception",
+  ease     = "Ease Perception",
+  purchase.intention = "Purchase Intention",
+  loyalty   = "Loyalty"
+)
+
+# Bar graph visualization
+ggplot(pay.descriptives.int.df, aes(x = condition, y = mean, fill = customer)) + 
+  
+  # Type of graph
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +  
+  
+  # Error bars
+  geom_errorbar(
+    aes(ymin = lower.ci, ymax = upper.ci),
+    position = position_dodge(width = 0.8),
+    width = 0.2
+  ) + 
+  
+  # Facets
+  facet_wrap(~ dep.variable, 
+             scales = "fixed", 
+             axes = "all", #
+             labeller = labeller(dep.variable = custom_titles)) + 
+  
+  # Graph title, axis titles, and fill title
+  labs(
+    y = "Mean Scores",
+    x = "Experimental Condition",
+    fill = "Customer",
+    title = "Differences Across Experimental Conditions"
+  ) + 
+  
+  # Labels in x axis
+  scale_x_discrete(labels = c ("No ControvPay", "ControvPay")) + 
+  
+  # Data labels
+  geom_text(
+    aes(y = upper.ci, label = paste0(round(mean, 2))), # use upper ci as reference position
+    position = position_dodge(width = 0.8),   # match the dodge of bars
+    vjust = -0.5,                             # slightly above the bar
+    size = 2.5                                # text size
+  ) + 
+  
+  # Limits for the y axis
+  coord_cartesian(ylim = c(3, 6.2)) +  
+  
+  # Formatting
+  theme_minimal(base_size = 12) +
+    theme(
+    axis.title.x = element_blank(),
+    legend.position = "right",
+    legend.justification = c("right", "bottom"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text  = element_text(size = 10),
+    panel.spacing = unit(1, "lines"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 0, vjust = 0, hjust = 0.5),  
+    plot.margin = margin(10, 5, 10, 5)
+  ) 
+
+```
+
+# Bayesian Approach
+
+## Reusable Function for Bayesian ANOVA
+
+This function provides Bayesian ANOVA analyses for a list of dependent variables and factors, with the option to specify different priors.  
+
+```{r}
+
+# Function for Bayesian ANOVA with multiple priors
+
+# Function name: f.bayes.anova
+#
+# Input parameters:
+#   my.data: dataframe containing the variables
+#   my.dv.list: vector of dependent variable names
+#   my.factor.list: vector of factor variable names  
+#   my.priors: vector of prior scales to test
+#
+# Output: list containing:
+#   individual models for each DV and prior combination
+#   summary: consolidated results dataframe
+
+f.bayes.anova <- function (my.data, my.dv.list, my.factor.list, my.priors){
+  
+  # Initialize results storage
+  bayes.results <- list()  
+  summary.bayes.results <- list()
+  p <- 1 # index for summary.bayes.results
+  
+  # Construct formula from factor list
+  factor.formula = paste0 ("~ ")
+    for (i.factor in seq_along(my.factor.list)){
+      if (i.factor != length(my.factor.list)) {
+           factor.formula <-  paste0 (factor.formula, my.factor.list[i.factor], " * ")      
+      } # Close the "if" function
+           else {
+             factor.formula <-  paste0 (factor.formula, my.factor.list[i.factor])
+           }  # Close the "else" function
+  } # Close the loop for the factors
+  
+  
+  # Loop through DVs and priors
+  for (dv in my.dv.list) {
+    
+    for(prior in my.priors) {
+      
+      # Fit Bayesian ANOVA model
+      bayes.model <- anovaBF(as.formula(paste(dv, factor.formula)),
+                      data = my.data,
+                      rscaleFixed = prior,  
+                      whichModels = 'all'
+      )
+      
+      # Store model with descriptive name
+      model.name <- paste0  (dv, ".prior.", prior)
+      bayes.results[[model.name]] <- bayes.model
+      
+      # Create summary dataframe
+      model.df <- as.data.frame (bayes.model)
+      model.df$dep.variable <- dv
+      model.df$prior <- prior
+      model.df$effect <- row.names(model.df)
+      model.df$BF <- model.df[[1]]
+      model.df$error <- model.df[[2]]
+      model.df <- model.df [ , c("dep.variable", "prior", "effect", "BF", "error")]
+      
+      # Save the summary dataframe
+      summary.bayes.results [[p]] <- model.df
+      p <- p  + 1 
+      
+    } # Close the loop for the priors
+    
+  } # Close the loop for the DVs
+  
+  # Consolidate results
+  summary.df <- do.call(rbind, summary.bayes.results)
+  row.names(summary.df) <- NULL
+  bayes.results[["summary"]] <- summary.df
+  
+  return(bayes.results)
+  
+}
+
+```
+
+
+## Example of Usage
+
+This example uses the **pay.df** dataframe, based on the project: "Corporate responsibility Versus Easiness of E-Commerce Payments Methods: An Experimental Study."
+
+We applied the function to analyze the following variables: 
+ * **DVs:** Questionnaire scores for social responsibility perception and loyalty.
+ * **Factor 1 (`condition`):** Two experimental groups (control vs. ControvPay exposition).
+ * **Factor 2 (`customer`):** Whether participants were customers ("yes") or non-customers ("no") of the retailer.
+
+We tested multiple prior scales (r = 0.1, 0.5, 1). 
+
+```{r}
+
+# Specify priors for sensitivity analysis
+priors <- c(0.1, 0.5, 1)
+
+# Dependent variables for Bayesian analysis
+dvs <- c("social.responsibility", "loyalty")
+
+# Experimental factors
+factors <- c("condition", "customer")
+
+# Apply Bayesian ANOVA function
+bayes.anova.results <- f.bayes.anova(my.data = pay.df, 
+                                    my.dv.list = dvs, 
+                                    my.factor.list = factors, 
+                                    my.priors = priors)
+
+# Display results summary
+summary.bayes <- bayes.anova.results[["summary"]]
+summary.bayes
+
+```
+
+## Example of Interpretation
+
+For loyalty, the evidence consistently supported the absence of an interaction effect across all priors. While this conclusion is currently supported by anecdotal to moderate evidence, it suggests that ControvPay is unlikely to substantially impact customer loyalty.
+
+For social responsibility, the results present ambiguous evidence regarding an interaction effect. With more conservative priors (rscale = 0.5 or 1.0), the evidence favored the null hypothesis of no differential effect between experimental conditions across customer profiles. However, these priors are less sensitive to detecting small effects. Conversely, when using a more sensitive prior (rscale = 0.1), we found anecdotal evidence for an interaction effect, though such sensitive priors also increase the risk of detecting statistical noise.
+
+Given that even small decreases in social responsibility perceptions could be impactful for our large-scale retailer, we proceeded to quantify this potential effect using Monte Carlo simulation to estimate the practical significance of this ambiguous finding.
+
+
+```{r}
+
+# Extract the model for social responsibility with sensitive prior
+m.soc.resp.0.1 <- bayes.anova.results[["social.responsibility.prior.0.1"]]
+
+# Simulate Monte Carlo chains
+chain.bayes.social.responsibility <- posterior(m.soc.resp.0.1, 
+                                               index = 7, 
+                                               iterations = 10000)
+
+# Convergence diagnostics for Monte Carlo chains
+plot(chain.bayes.social.responsibility[, 1:10])
+
+# Inspect Monte Carlo chains
+summary(chain.bayes.social.responsibility)
+
+# Calculate posterior distributions for group means
+
+# Main effects distributions
+d.main.effects <- data.frame(chain.bayes.social.responsibility[, 2:5] + chain.bayes.social.responsibility[, 1])
+
+# Interaction group distributions
+d.control.yes <- chain.bayes.social.responsibility[, "mu"] + 
+                 chain.bayes.social.responsibility[, "condition-control"] +
+                 chain.bayes.social.responsibility[, "customer-yes"] + 
+                 chain.bayes.social.responsibility[, "condition:customer-control.&.yes"]
+
+d.control.no <- chain.bayes.social.responsibility[, "mu"] + 
+                chain.bayes.social.responsibility[, "condition-control"] +
+                chain.bayes.social.responsibility[, "customer-no"] + 
+                chain.bayes.social.responsibility[, "condition:customer-control.&.no"]
+
+d.experimental.yes <- chain.bayes.social.responsibility[, "mu"] + 
+                      chain.bayes.social.responsibility[, "condition-experimental"] +
+                      chain.bayes.social.responsibility[, "customer-yes"] + 
+                      chain.bayes.social.responsibility[, "condition:customer-experimental.&.yes"]
+
+d.experimental.no <- chain.bayes.social.responsibility[, "mu"] + 
+                     chain.bayes.social.responsibility[, "condition-experimental"] +
+                     chain.bayes.social.responsibility[, "customer-no"] + 
+                     chain.bayes.social.responsibility[, "condition:customer-experimental.&.no"]
+
+# Combine all posterior distributions
+estimations <- bind_cols(as.data.frame(d.main.effects), 
+                         condition.control_customer.yes = d.control.yes, 
+                         condition.control_customer.no = d.control.no, 
+                         condition.experimental_customer.yes = d.experimental.yes, 
+                         condition.experimental_customer.no = d.experimental.no)
+
+# Calculate 95% credible intervals
+credible.intervals.soc.resp <- t(apply(estimations, 2, quantile, probs = c(0.025, 0.5, 0.975)))
+
+# Save credible intervals in dataframe
+credible.intervals.soc.resp.df <- data.frame(
+  group = rownames(credible.intervals.soc.resp),
+  median = credible.intervals.soc.resp[, "50%"],
+  lower.ci = credible.intervals.soc.resp[, "2.5%"],
+  upper.ci = credible.intervals.soc.resp[, "97.5%"]
+)
+
+rownames(credible.intervals.soc.resp.df) <- NULL
+credible.intervals.soc.resp.df
+
+```
+
+The convergence diagnostics indicate that the model estimations were stable and converged appropriately (homogeneous patterns in the trace plots and normal distributions of the simulation results). The estimated means and credible intervals are consistent with the descriptive data. For better interpretation, we visualize them below.
+
+
+## Graph Example 
+
+We can create a dots-and-wisker plot to represent the above estimations and credible intervals
+
+```{r}
+
+# Visualization of posterior distributions
+ggplot(credible.intervals.soc.resp.df, aes(x = group, y = median)) +
+  
+  # Graph type, confidence intervals
+  geom_pointrange(aes(ymin = lower.ci, ymax = upper.ci), 
+                  size = 0.7, color = "black") +
+  
+  # Formatting of points
+  geom_point(size = 2, color = "black") +
+  
+  # Graph titles and Axis Titles
+  labs(title = "Posterior Distributions - Social Responsibility Perception",
+       subtitle = "Points show median estimates, bars show 95% credible intervals",
+       y = "Social Responsibility Score (1-7 scale)", 
+       x = "Experimental Group") +
+  
+  # Formatting
+  theme_bw() +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"),
+        plot.subtitle = element_text(color = "gray40"))
+
+```
+
+## Example of Graph Interpretation
+
+The posterior distributions provide evidence of the interaction we have been exploring: ControvPay differentially affects existing customers versus non-customers:
+
+* Non-customers: Negligible difference (0.01 points) between those exposed and not exposed to ControvPay
+* Existing customers: Decrease of 0.21 points in social responsibility perception when exposed to ControvPay
+
+While the effect size is small, it could be meaningful given the large customer base. To further investigate this difference, we specifically evaluated the contrast between experimental conditions within the customer group using Bayesian post-hoc comparisons.
+
+# Example of Bayesian ANOVA Post-Hoc Analysis
+
+```{r}
+
+# Calculate posterior distribution of differences within customers
+dif.in.customers <- d.control.yes - d.experimental.yes
+
+# Calculate credible intervals for the difference
+ci.dif.in.customers <- quantile(dif.in.customers, probs = c(0.025, 0.5, 0.975))
+ci.dif.in.customers
+
+```
+
+The results confirm that social responsibility perception is significantly lower for the retailer's customers exposed to ControvPay compared to those not exposed [median difference = 0.21 points, 95% CI: 0.03, 0.41].
+
+The emergence of this difference specifically among existing customers aligns with theoretical expectations, as the retailer is known for high ethical standards, and its customers are likely more sensitive to ethical controversies in payment methods.
+
+Given that social responsibility perception was associated with impactful outcomes like customer loyalty and purchase intention, we conducted mediation analyses within the customer subgroup to examine whether the effect on social responsibility had downstream consequences.
+
+
+
