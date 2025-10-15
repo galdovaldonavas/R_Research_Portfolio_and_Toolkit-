@@ -50,7 +50,7 @@ I am continuously adding more projects and expanding the toolkit.
   * **Bayesian Sensitivity Analyses:** Robustness checks with multiple prior specifications. 
   * **Causal Mechanisms:** Path analysis examining mediation through social responsibility perceptions. 
   * **Impact Evaluation:** Logistic models quantifying potential customer loss. 
-* **Tools & Libraries:** R with `ggplot2`, `kableExtra`, `DiagrammeR`, `psych`, `MASS`, `car`, `corrplot`, `effectsize`, `BayesFactor`, and `PROCESS`.
+* **Tools & Libraries:** R with `dplyr`, `ggplot2`, `kableExtra`, `DiagrammeR`, `psych`, `MASS`, `car`, `corrplot`, `effectsize`, `BayesFactor`, and `PROCESS`.
 * [View Project Notebook on RPubs](https://rpubs.com/galdovaldonavas/1355540)
 
 ---

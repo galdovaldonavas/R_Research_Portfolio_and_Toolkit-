@@ -18,13 +18,7 @@ output:
 
 # 1. Introduction
 
-This case study examines the impact of introducing a new payment method, "ControvPay," on customer perceptions. While the addition was anticipated to enhance convenience, it also risked provoking negative reactions due to ethical controversies associated with the provider. To evaluate this trade-off, we conducted an experimental study measuring key metrics:
-
-* Perceived Ease of Use.
-* Perceived Corporate Social Responsibility.  
-* Purchase Intention.
-* Customer Loyalty.
-* Payment Method Adoption.
+This case study examines the impact of introducing a new payment method, "ControvPay," on customer perceptions. While the addition was anticipated to enhance convenience, it also risked provoking negative reactions due to ethical controversies associated with the provider. To evaluate this trade-off, we conducted an experimental study measuring key metrics like adoption, perceived ease of use, perceived social responsability, purchase intention, and loyalty. 
 
 The analytical approach encompasses:
 
@@ -45,15 +39,9 @@ We begin by loading the R packages required for data manipulation, visualization
 
 ```{r}
 
-# Data handling
-library(dplyr)       # Data manipulation
-library(openxlsx)    # Excel file handling
-
 # Visualization
 library(ggplot2)     # General plotting
-library(vcd)         # Mosaic plots
 library(kableExtra)  # Table formatting
-library(beanplot)    # Density distributions
 library(DiagrammeR)  # Path Diagrams 
 
 # Statistical analysis
@@ -2134,7 +2122,7 @@ Future research could extend these analyses by:
 * Conducting replication studies with larger sample sizes
 * Exploring heterogeneity across customer segments to identify groups more sensitive to ControvPay introduction
 
-## 14. Bibliography
+# 14. Bibliography
 
 * Maignan, I. (2001). Consumers' perceptions of corporate social responsibilities: A cross-cultural comparison. Journal of business ethics, 30(1), 57-72. 
 

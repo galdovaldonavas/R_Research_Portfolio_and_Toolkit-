@@ -1,6 +1,7 @@
 ---
 title: "Predicting Customer Detractors (Part 2): Opportunity Analysis from Open Feedback"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
     self_contained: false
@@ -8,7 +9,6 @@ output:
     toc: true
     toc_float: true
     toc_depth: 2
-  pdf_document: default
   html_notebook:
     css: my_style.css
     toc: true
@@ -22,10 +22,11 @@ output:
 This case study identifies and quantifies high-impact opportunities in the customer service to improve the likelihood that customers recommend the company, building directly on the findings of [Predicting Customer Detractors (Part 1): Analyzing Contextual Factors via Logistic Regression](https://rpubs.com/galdovaldonavas/1335090). Where Part 1 identified which service contexts had the most detractors (e.g., chat for incorrect items), this project investigates the root causes of dissatisfaction through thematic analysis of open-ended feedback and simulates the potential business impact of addressing them.
 
 The analysis includes:
-- Data simulation and cleaning.
-- Exploratory analysis with descriptive statistics and visualizations.  
-- Logistic regression modeling.
-- Simulation-based predictions using bootstrapping. 
+* Data simulation and cleaning.
+* Exploratory analysis with descriptive statistics and visualizations.  
+* Logistic regression modeling.
+* Simulation-based predictions using bootstrapping. 
+* Prediction Validations.
 
 Although based on a real-world project, all data, variables, and insights presented here have been simulated to ensure confidentiality.
 
