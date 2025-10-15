@@ -1,15 +1,15 @@
 ---
 title: "Corporate responsibility Versus Easiness of E-Commerce Payments Methods: An Experimental Study"
 output:
-  html_notebook:
+  html_document:
+    df_print: paged
+    self_contained: false
     css: my_style.css
     toc: true
     toc_float: true
     toc_depth: 2
   pdf_document: default
-  html_document:
-    df_print: paged
-    self_contained: false
+  html_notebook:
     css: my_style.css
     toc: true
     toc_float: true
@@ -1637,13 +1637,6 @@ Given that social responsibility perception was associated with impactful outcom
 
 # 11. Path Analyses
 
-Although prior analyses indicated no significant direct differences in loyalty and purchase intention between experimental conditions, it is possible that these effects were small and masked by statistical noise. Isolating the variability that can be explained by the relations of this variables with social responsability can provide a more complecte picture of the experimental effects.
-
-For this, We use mediation analysis examining the experimental effect on these variables through social responsibility perceptions. 
-
-
-# 11. Path Analyses
-
 Although prior analyses indicated no significant direct differences in loyalty and purchase intention between experimental conditions, it is possible that these effects were small and masked by statistical noise. Isolating the variability explained by indirect effects of the experimental condition on these variables through social responsibility perceptions can provide a more complete picture and more sensitivity for the experimental effects.
 
 We used mediation analysis to examine these indirect effects with the R extension PROCESS (https://www.processmacro.org/index.html).
@@ -1704,13 +1697,17 @@ To analyze the mediation effect of experimental condition on purchase intention 
 customers.pay.df$condition_num <- ifelse(customers.pay.df$condition == "experimental", 1, 0)
 
 # Run mediation analysis
-process(data = customers.pay.df, 
-        y = "purchase.intention", 
-        x = "condition_num", 
-        m = "social.responsibility", 
-        model = 4, 
-        boot = 5000,
-        seed = 123)
+
+## ATTENTION: Before running this function it is important to load PROCESS, 
+## then remove "#" below for the function to run properly
+
+#process(data = customers.pay.df, 
+ #        y = "purchase.intention", 
+ #        x = "condition_num", 
+ #        m = "social.responsibility", 
+ #        model = 4, 
+ #        boot = 5000,
+ #        seed = 123) 
 
 ```
 
@@ -1752,15 +1749,16 @@ This indirect effect is negligible (effect = -0.02) and its 95% confidence inter
 Following the same approach as the previous section, we used the simple mediation model (Model 4) in PROCESS to analyze the mediation effect of experimental condition on loyalty through social responsibility perceptions.
 
 ```{r}
+## ATTENTION: Before running this function it is important to load PROCESS, 
+## then remove "#" below for the function to run properly
 
-# Run mediation analysis for loyalty
-process(data = customers.pay.df, 
-        y = "loyalty", 
-        x = "condition_num", 
-        m = "social.responsibility", 
-        model = 4, 
-        boot = 5000,
-        seed = 123)
+#process(data = customers.pay.df, 
+ #        y = "loyalty", 
+ #        x = "condition_num", 
+ #        m = "social.responsibility", 
+ #        model = 4, 
+ #        boot = 5000,
+ #        seed = 123) 
 
 ```
 
